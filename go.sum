@@ -58,8 +58,8 @@ github.com/godyy/grendezvous v0.1.2 h1:hcD2NTn5mkLfhL3UOSl9VDeOKEAITjHtcwd44pFfh
 github.com/godyy/grendezvous v0.1.2/go.mod h1:xiBW+oybgIhzfyNWbdMxWJvHnllDXBfZYrafiqLdgqE=
 github.com/godyy/gtimewheel v0.1.1 h1:T8q9YapvMZ9FZpSXnS7/igQbgf3Qoy/z66GCDv9Sntw=
 github.com/godyy/gtimewheel v0.1.1/go.mod h1:wOmNKjkpEz03ACVNdQ58DVr6mAKliRGdE+0MA/piZME=
-github.com/godyy/gutils v0.0.3 h1:2T4V6LBRWG+TLsmZmK7hJ7SX4yiHIDXSjw6ERPfi748=
-github.com/godyy/gutils v0.0.3/go.mod h1:ExhCh7LStCtq6PgbG00/PscKlKVNc87aShjpYTSN6IU=
+github.com/godyy/gutils v0.0.2 h1:PegtVz0trk0kqvq4LEBXqkPaD1cD9zMLt7Q7jmHHzn0=
+github.com/godyy/gutils v0.0.2/go.mod h1:ExhCh7LStCtq6PgbG00/PscKlKVNc87aShjpYTSN6IU=
 github.com/gogo/protobuf v1.3.2 h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=
 github.com/gogo/protobuf v1.3.2/go.mod h1:P1XiOD3dCwIKUDQYPy72D8LYyHL2YPYrpS2s69NZV8Q=
 github.com/golang-jwt/jwt/v4 v4.5.2 h1:YtQM7lnr8iZ+j5q71MGKkNw9Mn7AjHM68uc9g5fXeUI=
