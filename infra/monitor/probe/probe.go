@@ -36,7 +36,6 @@ func Init(router monitor.HttpRouter, opts ...Option) {
 
 // healthzHandler 原生 http 健康探针.
 func healthzHandler() http.HandlerFunc {
-	checkInitialized(true)
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

@@ -47,7 +47,6 @@ func SetReady(ready bool) {
 
 // readyzHandler 原生 http 就绪探针.
 func readyzHandler() http.HandlerFunc {
-	checkInitialized(true)
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// 门闩未放开直接 503
