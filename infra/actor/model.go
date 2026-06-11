@@ -98,6 +98,11 @@ type ModelDirtyAll struct {
 	dirty bool           // 是否脏位.
 }
 
+// NewModelDirtyAll 构造全脏脏数据模型.
+func NewModelDirtyAll(actor ActorWithModel) *ModelDirtyAll {
+	return &ModelDirtyAll{actor: actor}
+}
+
 // SetDirty 设置脏位.
 func (md *ModelDirtyAll) SetDirty() {
 	md.dirty = true
