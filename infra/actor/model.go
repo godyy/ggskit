@@ -91,3 +91,30 @@ func (md *ModelDirty) Release() {
 	md.actor = nil
 	md.dirties = nil
 }
+
+// ModelDirtyAll 全脏脏数据模型.
+type ModelDirtyAll struct {
+	actor ActorWithModel // 关联ActorWithModel.
+	dirty bool           // 是否脏位.
+}
+
+// SetDirty 设置脏位.
+func (md *ModelDirtyAll) SetDirty() {
+	md.dirty = true
+	md.actor.OnModelDirty()
+}
+
+// IsDirty 是否有脏数据.
+func (md *ModelDirtyAll) IsDirty() (dirty bool, all bool) {
+	return md.dirty, md.dirty
+}
+
+// ClearDirty 清除脏数据.
+func (md *ModelDirtyAll) ClearDirty() {
+	md.dirty = false
+}
+
+// MarshalBSONDirty 序列化脏数据.
+func (md *ModelDirtyAll) MarshalBSONDirty() ([]byte, error) {
+	return bson.Marshal(md.actor.GetModel())
+}
