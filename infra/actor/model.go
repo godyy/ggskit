@@ -123,3 +123,7 @@ func (md *ModelDirtyAll) ClearDirty() {
 func (md *ModelDirtyAll) MarshalBSONDirty() ([]byte, error) {
 	return bson.Marshal(md.actor.GetModel())
 }
+
+func (md *ModelDirtyAll) Release() {
+	md.actor = nil
+}
