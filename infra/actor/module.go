@@ -28,6 +28,9 @@ type ModuleKey interface {
 type Module interface {
 	ModuleKey
 
+	// OnInit 初始化模块, 在模块被创建时调用.
+	OnInit()
+
 	// SetContainer 设置模块归属容器.
 	SetContainer(ModuleContainer)
 }
@@ -86,6 +89,8 @@ type ModuleSingle[V any, Key ModuleKey] struct {
 	ModuleBase[*ModuleSingle[V, Key]]
 	value V
 }
+
+func (m *ModuleSingle[V, Key]) OnInit() {}
 
 func (m *ModuleSingle[V, Key]) ModuleKey() string {
 	var k Key
@@ -195,7 +200,9 @@ type moduleInfo struct {
 }
 
 func (mi *moduleInfo) create() Module {
-	return reflect.New(mi.typ).Interface().(Module)
+	m := reflect.New(mi.typ).Interface().(Module)
+	m.OnInit()
+	return m
 }
 
 // ModuleRegistry 模块注册表

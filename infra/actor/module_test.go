@@ -69,12 +69,16 @@ type testModuleA struct {
 	Value string
 }
 
+func (m *testModuleA) OnInit() {}
+
 func (m *testModuleA) ModuleKey() string { return "A" }
 
 type testModuleB struct {
 	testModuleBase[*testModuleB]
 	Value string
 }
+
+func (m *testModuleB) OnInit() {}
 
 func (m *testModuleB) ModuleKey() string { return "B" }
 
