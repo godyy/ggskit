@@ -15,11 +15,11 @@ type NodeGroupFunc func(node *cluster.Node) (group string, ok bool)
 
 // ActorNodeGroupFunc 返回 Actor 所属的部署节点分组。
 // ok=false 表示该 Actor 类别当前不支持路由。
-type ActorNodeGroupFunc func(uid gactor.ActorUID) (group string, ok bool)
+type ActorNodeGroupFunc func(uid ActorUID) (group string, ok bool)
 
 // ActorFixedNodeFunc 返回 Actor 固定部署节点。
 // ok=false 表示该 Actor 不使用固定节点路由。
-type ActorFixedNodeFunc func(uid gactor.ActorUID) (nodeID string, ok bool)
+type ActorFixedNodeFunc func(uid ActorUID) (nodeID string, ok bool)
 
 // RouterConfig Router 配置.
 type RouterConfig struct {
@@ -62,7 +62,7 @@ func NewRouter(cfg RouterConfig) (*Router, error) {
 	}, nil
 }
 
-func actorUIDRouteKey(uid gactor.ActorUID) []byte {
+func actorUIDRouteKey(uid ActorUID) []byte {
 	var key [10]byte
 	binary.BigEndian.PutUint16(key[:2], uid.Category)
 	binary.BigEndian.PutUint64(key[2:], uint64(uid.ID))
@@ -112,7 +112,7 @@ func (r *Router) UpdateEvents(events []cluster.NodeEvent) {
 }
 
 // PickActorNode 为未注册 Actor 选择部署节点.
-func (r *Router) PickActorNode(uid gactor.ActorUID) (string, error) {
+func (r *Router) PickActorNode(uid ActorUID) (string, error) {
 	nodeID, ok := r.actorFixedNode(uid)
 	if ok {
 		if nodeID == "" {

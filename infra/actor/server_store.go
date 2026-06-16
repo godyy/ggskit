@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/godyy/gactor"
 	pkgerrors "github.com/pkg/errors"
 	redis "github.com/redis/go-redis/v9"
 )
@@ -19,7 +18,7 @@ var (
 const serverStoreTimeout = 5 * time.Second
 
 // genActorServerKey 生成 Actor 所属服务器映射 key.
-func genActorServerKey(uid gactor.ActorUID) string {
+func genActorServerKey(uid ActorUID) string {
 	return fmt.Sprintf("actor_server:%d:%d", uid.Category, uid.ID)
 }
 
@@ -37,7 +36,7 @@ func NewServerStore(redisCli redis.UniversalClient) (*ServerStore, error) {
 }
 
 // SetActorServer 设置 Actor 所属服务器.
-func (s *ServerStore) SetActorServer(uid gactor.ActorUID, serverID int64) error {
+func (s *ServerStore) SetActorServer(uid ActorUID, serverID int64) error {
 	if err := validateUID(uid); err != nil {
 		return pkgerrors.WithMessage(err, "set actor server")
 	}
@@ -55,7 +54,7 @@ func (s *ServerStore) SetActorServer(uid gactor.ActorUID, serverID int64) error 
 }
 
 // GetActorServer 获取 Actor 所属服务器.
-func (s *ServerStore) GetActorServer(uid gactor.ActorUID) (int64, bool, error) {
+func (s *ServerStore) GetActorServer(uid ActorUID) (int64, bool, error) {
 	if err := validateUID(uid); err != nil {
 		return 0, false, pkgerrors.WithMessage(err, "get actor server")
 	}

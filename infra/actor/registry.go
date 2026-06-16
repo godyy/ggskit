@@ -120,7 +120,7 @@ return {0, reg["NodeId"] or "", ttlSeconds}
 )
 
 // genActorRegKey 生成Actor的注册key.
-func genActorRegKey(uid gactor.ActorUID) string {
+func genActorRegKey(uid ActorUID) string {
 	return fmt.Sprintf("actor_reg:%d:%d", uid.Category, uid.ID)
 }
 
@@ -339,7 +339,7 @@ func ttlToExpireAt(ttl int64) int64 {
 	return time.Now().Unix() + ttl
 }
 
-func validateUID(uid gactor.ActorUID) error {
+func validateUID(uid ActorUID) error {
 	if uid.IsZero() {
 		return ErrActorUIDRequired
 	}
@@ -391,7 +391,7 @@ func validateKeepAlive(params gactor.ActorKeepAliveParams) error {
 	return nil
 }
 
-func validateLookup(uid gactor.ActorUID) error {
+func validateLookup(uid ActorUID) error {
 	if err := validateUID(uid); err != nil {
 		return pkgerrors.WithMessage(err, "lookup actor registry")
 	}

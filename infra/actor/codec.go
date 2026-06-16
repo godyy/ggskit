@@ -2,8 +2,6 @@ package actor
 
 import (
 	"errors"
-	"fmt"
-	"reflect"
 
 	"github.com/godyy/gactor"
 	codecc2s "github.com/godyy/ggskit/base/codec/c2s"
@@ -14,14 +12,12 @@ import (
 
 // CodecConfig Actor 数据包编解码器配置.
 type CodecConfig struct {
-	C2SProtoReg codecc2s.ProtoRegistry
-	S2SProtoReg codecs2s.ProtoRegistry
+	ProtoRegistry *ProtoRegistry
 }
 
 // Codec Actor 数据包编解码器.
 type Codec struct {
-	c2sProtoReg codecc2s.ProtoRegistry
-	s2sProtoReg codecs2s.ProtoRegistry
+	*ProtoRegistry
 }
 
 // NewCodec 创建 Actor 数据包编解码器.
@@ -29,15 +25,11 @@ func NewCodec(cfg *CodecConfig) (*Codec, error) {
 	if cfg == nil {
 		return nil, errors.New("codec config is nil")
 	}
-	if cfg.C2SProtoReg == nil {
-		return nil, errors.New("c2s proto reg is nil")
-	}
-	if cfg.S2SProtoReg == nil {
-		return nil, errors.New("s2s proto reg is nil")
+	if cfg.ProtoRegistry == nil {
+		return nil, errors.New("proto registry is nil")
 	}
 	return &Codec{
-		c2sProtoReg: cfg.C2SProtoReg,
-		s2sProtoReg: cfg.S2SProtoReg,
+		ProtoRegistry: cfg.ProtoRegistry,
 	}, nil
 }
 
@@ -63,15 +55,11 @@ func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, e
 	switch allocator.PacketType() {
 	case gactor.PacketTypeRawResp, gactor.PacketTypeRawPush:
 		p := payload.(*C2SPayload)
-		pid, ok := c.c2sProtoReg.GetPid(p.Msg)
-		if !ok {
-			return nil, fmt.Errorf("msg %v not registered", reflect.TypeOf(p.Msg))
-		}
 		msgBytes, err := proto.Marshal(p.Msg)
 		if err != nil {
-			return nil, pkgerrors.WithMessagef(err, "marshal msg of pid %d failed", pid)
+			return nil, pkgerrors.WithMessagef(err, "marshal msg of pid %d failed", p.PID)
 		}
-		head := codecc2s.NewHead(p.Pt, p.Seq, pid)
+		head := codecc2s.NewHead(p.Pt, p.Seq, p.PID)
 		if err := allocator.AllocBuf(&buffer, len(head)+len(msgBytes)); err != nil {
 			return nil, pkgerrors.WithMessagef(err, "alloc buf failed")
 		}
@@ -114,7 +102,7 @@ func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, e
 //	PacketTypeS2SRpc, PacketTypeS2SCast
 func (c *Codec) EncodePayload(pt gactor.PacketType, payload any) ([]byte, error) {
 	p := payload.(*S2SPayload)
-	return codecs2s.EncodePayload(c.s2sProtoReg, p.PID, p.Msg)
+	return codecs2s.EncodePayload(c.S2S, p.PID, p.Msg)
 }
 
 // DecodePayload 解码负载数据.
@@ -137,7 +125,7 @@ func (c *Codec) DecodePayload(pt gactor.PacketType, b *gactor.Buffer, payload an
 		p.Pt = head.GetPt()
 		p.Seq = head.GetSeq()
 		p.PID = head.GetPid()
-		msg, err := c.c2sProtoReg.Create(p.PID)
+		msg, err := c.C2S.Create(p.PID)
 		if err != nil {
 			return pkgerrors.WithMessagef(err, "msg of pid %d not registered", p.PID)
 		}
@@ -148,7 +136,7 @@ func (c *Codec) DecodePayload(pt gactor.PacketType, b *gactor.Buffer, payload an
 
 	case gactor.PacketTypeS2SRpc, gactor.PacketTypeS2SRpcResp, gactor.PacketTypeS2SCast:
 		p := payload.(*S2SPayload)
-		pid, msg, err := codecs2s.DecodePayload(c.s2sProtoReg, b.UnreadData())
+		pid, msg, err := codecs2s.DecodePayload(c.S2S, b.UnreadData())
 		if err != nil {
 			return err
 		}
