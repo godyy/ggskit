@@ -7,16 +7,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// ModelWithModule 模块模型接口.
+type ModelWithModule interface {
+	ModelDirty
+	ModuleContainer
+}
+
 // ActorWithModule 包含数据模块的Actor接口.
 type ActorWithModule interface {
 	ActorWithModel
 
-	GetModuleContainer() ModuleContainer
-}
-
-// GetModuleOfActor 通过actor获取模块的通用泛型封装.
-func GetModuleOfActor[M Module](actor ActorWithModule, autoCreate bool) M {
-	return GetModuleOfContainer[M](actor.GetModuleContainer(), autoCreate)
+	// GetModelWithModule 获取模块模型实例.
+	GetModelWithModule() ModelWithModule
 }
 
 // ModuleKey 模块关键字接口
@@ -30,63 +32,20 @@ type Module interface {
 
 	// OnInit 初始化模块, 在模块被创建时调用.
 	OnInit()
-
-	// SetContainer 设置模块归属容器.
-	SetContainer(ModuleContainer)
 }
 
 // ModuleContainer 模块容器.
 type ModuleContainer interface {
-	// ModuleRegistry 获取模块注册表.
-	ModuleRegistry() *ModuleRegistry
-
 	// GetModule 获取模块实例.
-	GetModule(key string, autoCreate bool) Module
+	GetModule(mk ModuleKey, autoCreate bool) Module
 
 	// SetModuleDirty 设置模块脏位.
-	SetModuleDirty(key string)
-}
-
-// GetModuleOfContainer 获取容器中的模块实例的泛型封装.
-func GetModuleOfContainer[M Module](mc ModuleContainer, autoCreate bool) (m M) {
-	module := mc.GetModule(m.ModuleKey(), autoCreate)
-	if module == nil {
-		panic("module " + m.ModuleKey() + " not exists")
-	}
-	moduleM, ok := module.(M)
-	if !ok {
-		panic("module " + m.ModuleKey() + " type is " + reflect.TypeOf(moduleM).Name())
-	}
-	return moduleM
-}
-
-// ModuleBase 模块基础实现.
-// 集成模块需要具备的简单基础功能.
-type ModuleBase[M Module] struct {
-	mc ModuleContainer // 模块归属容器.
-}
-
-func NewModuleBase[M Module](mc ModuleContainer) ModuleBase[M] {
-	return ModuleBase[M]{
-		mc: mc,
-	}
-}
-
-// SetContainer 设置模块归属容器.
-func (m *ModuleBase[M]) SetContainer(mc ModuleContainer) {
-	m.mc = mc
-}
-
-// SetDirty 设置模块脏位.
-func (m *ModuleBase[M]) SetDirty() {
-	var mm M
-	m.mc.SetModuleDirty(mm.ModuleKey())
+	SetModuleDirty(mk ModuleKey)
 }
 
 // ModuleSingle 单值模块.
 // 用于存储单值模块数据.
 type ModuleSingle[V any, Key ModuleKey] struct {
-	ModuleBase[*ModuleSingle[V, Key]]
 	value V
 }
 
@@ -103,7 +62,6 @@ func (m *ModuleSingle[V, Key]) Get() V {
 
 func (m *ModuleSingle[V, Key]) Set(v V) {
 	m.value = v
-	m.SetDirty()
 }
 
 func (m *ModuleSingle[V, Key]) MarshalBSONValue() (byte, []byte, error) {
@@ -115,36 +73,34 @@ func (m *ModuleSingle[V, Key]) UnmarshalBSONValue(t byte, data []byte) error {
 	return bson.UnmarshalValue(bson.Type(t), data, &m.value)
 }
 
-// ModuleMgr 模块管理器.
-type ModuleMgr struct {
-	mc      ModuleContainer   // 容器
-	modules map[string]Module // 模块实例映射表
+// Modules Module集中管理器.
+type Modules struct {
+	moduleRegistry *ModuleRegistry   // 模块注册表
+	modules        map[string]Module // 模块实例映射表
 }
 
-func NewModuleMgr(mc ModuleContainer) *ModuleMgr {
-	return &ModuleMgr{
-		mc:      mc,
-		modules: make(map[string]Module, mc.ModuleRegistry().Len()),
+func NewModules(moduleRegistry *ModuleRegistry) *Modules {
+	return &Modules{
+		moduleRegistry: moduleRegistry,
+		modules:        make(map[string]Module, moduleRegistry.Len()),
 	}
 }
 
 // InitAllModules 初始化说有模块实例
-func (mm *ModuleMgr) InitAllModules() {
-	moduleRegistry := mm.mc.ModuleRegistry()
+func (ms *Modules) InitAllModules() {
+	moduleRegistry := ms.moduleRegistry
 	for _, mi := range moduleRegistry.moduleList {
 		m := mi.create()
-		m.SetContainer(mm.mc)
-		mm.modules[mi.key] = m
+		ms.modules[mi.key] = m
 	}
 }
 
 // GetModule 获取模块实例
-func (mm *ModuleMgr) GetModule(key string, autoCreate bool) Module {
-	m := mm.modules[key]
+func (ms *Modules) GetModule(mk ModuleKey, autoCreate bool) Module {
+	m := ms.modules[mk.ModuleKey()]
 	if m == nil && autoCreate {
-		m = mm.mc.ModuleRegistry().Create(key)
-		m.SetContainer(mm.mc)
-		mm.modules[key] = m
+		m = ms.moduleRegistry.Create(mk)
+		ms.modules[mk.ModuleKey()] = m
 	}
 
 	return m
@@ -152,20 +108,17 @@ func (mm *ModuleMgr) GetModule(key string, autoCreate bool) Module {
 
 // Release 清理所有模块实例, 解除引用model.
 // 释放时调用.
-func (mm *ModuleMgr) Release() {
-	for _, m := range mm.modules {
-		m.SetContainer(nil)
-	}
-	mm.modules = nil
-	mm.mc = nil
+func (ms *Modules) Release() {
+	ms.moduleRegistry = nil
+	ms.modules = nil
 }
 
 // MarshalBSON 序列化模块实例BSON
-func (mm *ModuleMgr) MarshalBSON() ([]byte, error) {
-	moduleRegistry := mm.mc.ModuleRegistry()
-	elements := make(bson.D, 0, len(mm.modules))
+func (ms *Modules) MarshalBSON() ([]byte, error) {
+	moduleRegistry := ms.moduleRegistry
+	elements := make(bson.D, 0, len(ms.modules))
 	for _, mi := range moduleRegistry.moduleList {
-		module := mm.modules[mi.key]
+		module := ms.modules[mi.key]
 		if module == nil {
 			continue
 		}
@@ -175,20 +128,19 @@ func (mm *ModuleMgr) MarshalBSON() ([]byte, error) {
 }
 
 // UnmarshalBSON 反序列化模块实例BSON
-func (mm *ModuleMgr) UnmarshalBSON(data []byte) error {
+func (ms *Modules) UnmarshalBSON(data []byte) error {
 	raw := bson.Raw(data)
-	moduleRegistry := mm.mc.ModuleRegistry()
+	moduleRegistry := ms.moduleRegistry
 	for _, mi := range moduleRegistry.moduleList {
 		value := raw.Lookup(mi.key)
 		if value.IsZero() {
 			continue
 		}
 		m := mi.create()
-		m.SetContainer(mm.mc)
 		if err := bson.UnmarshalValue(value.Type, value.Value, m); err != nil {
 			return pkgerrors.WithMessagef(err, "unmarshal module %s", mi.key)
 		}
-		mm.modules[mi.key] = m
+		ms.modules[mi.key] = m
 	}
 	return nil
 }
@@ -241,8 +193,8 @@ func (mr *ModuleRegistry) Register(m Module) *ModuleRegistry {
 }
 
 // Create 创建模块实例
-func (mr *ModuleRegistry) Create(key string) Module {
-	if mi := mr.moduleMap[key]; mi != nil {
+func (mr *ModuleRegistry) Create(mk ModuleKey) Module {
+	if mi := mr.moduleMap[mk.ModuleKey()]; mi != nil {
 		return mi.create()
 	}
 	return nil
@@ -252,4 +204,34 @@ func (mr *ModuleRegistry) Create(key string) Module {
 func RegisterModule[M Module](mr *ModuleRegistry) {
 	var m M
 	mr.Register(m)
+}
+
+// GetModule 获取容器中的模块实例的泛型封装.
+func GetModule[M Module](mc ModuleContainer, autoCreate bool) (m M) {
+	module := mc.GetModule(m, autoCreate)
+	if module == nil {
+		panic("module " + m.ModuleKey() + " not exists")
+	}
+	moduleM, ok := module.(M)
+	if !ok {
+		panic("module " + m.ModuleKey() + " type is " + reflect.TypeOf(moduleM).Name())
+	}
+	return moduleM
+}
+
+// GetActorModule 通过actor获取模块的通用泛型封装.
+func GetActorModule[M Module](actor ActorWithModule, autoCreate bool) M {
+	return GetModule[M](actor.GetModelWithModule(), autoCreate)
+}
+
+// SetActorModuleDirty 设置Actor数据模块脏位.
+func SetActorModuleDirty(actor ActorWithModule, mk ...ModuleKey) {
+	if len(mk) == 0 {
+		return
+	}
+	mm := actor.GetModelWithModule()
+	for _, mk := range mk {
+		mm.SetModuleDirty(mk)
+	}
+	actor.OnModelDirty()
 }

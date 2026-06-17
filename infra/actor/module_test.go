@@ -10,6 +10,56 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// testModelDirty 脏数据模型.
+type testModelDirty struct {
+	actor   ActorWithModel // 关联ActorWithModel.
+	dirties bson.M         // 脏数据
+	all     bool           // 是否全脏位.
+}
+
+// newTestModelDirty 构造脏数据模型.
+func newTestModelDirty(actor ActorWithModel) *testModelDirty {
+	return &testModelDirty{actor: actor}
+}
+
+// SetDirty 设置脏数据.
+func (md *testModelDirty) SetDirty(key string, value any) {
+	if md.dirties == nil {
+		md.dirties = make(bson.M)
+	}
+	md.dirties[key] = value
+	md.actor.OnModelDirty()
+}
+
+// SetDirtyAll 设置全脏位.
+func (md *testModelDirty) SetDirtyAll() {
+	md.all = true
+	md.actor.OnModelDirty()
+}
+
+// IsDirty 是否有脏数据.
+func (md *testModelDirty) IsDirty() (dirty bool, all bool) {
+	all = md.all
+	dirty = all || len(md.dirties) > 0
+	return
+}
+
+// ClearDirty 清除脏数据.
+func (md *testModelDirty) ClearDirty() {
+	md.dirties = nil
+	md.all = false
+}
+
+// MarshalBSONDirty 序列化脏数据.
+func (md *testModelDirty) MarshalBSONDirty() ([]byte, error) {
+	return bson.Marshal(md.dirties)
+}
+
+func (md *testModelDirty) Release() {
+	md.actor = nil
+	md.dirties = nil
+}
+
 type testActor struct {
 	ActorWithModel
 }
@@ -17,22 +67,20 @@ type testActor struct {
 func (ta *testActor) OnModelDirty() {
 }
 
-type testModuleBase[M Module] = ModuleBase[M]
-
 type testModel struct {
-	mr          *ModuleRegistry
-	ID          int64      `bson:"id"`
-	Name        string     `bson:"name"`
-	Modules     *ModuleMgr `bson:"modules"`
-	*ModelDirty `bson:"-"`
+	mr              *ModuleRegistry
+	ID              int64    `bson:"id"`
+	Name            string   `bson:"name"`
+	Modules         *Modules `bson:"modules"`
+	*testModelDirty `bson:"-"`
 }
 
 func newTestModel(mr *ModuleRegistry) *testModel {
 	m := &testModel{
-		mr:         mr,
-		ModelDirty: NewModelDirty(&testActor{}),
+		mr:             mr,
+		testModelDirty: newTestModelDirty(&testActor{}),
 	}
-	m.Modules = NewModuleMgr(m)
+	m.Modules = NewModules(mr)
 	return m
 }
 
@@ -40,13 +88,13 @@ func (m *testModel) ModuleRegistry() *ModuleRegistry {
 	return m.mr
 }
 
-func (m *testModel) SetModuleDirty(key string) {
+func (m *testModel) SetModuleDirty(key ModuleKey) {
 	if module := m.Modules.GetModule(key, false); module != nil {
-		m.ModelDirty.SetDirty("modules."+module.ModuleKey(), module)
+		m.testModelDirty.SetDirty("modules."+module.ModuleKey(), module)
 	}
 }
 
-func (m *testModel) GetModule(key string, autoCreate bool) Module {
+func (m *testModel) GetModule(key ModuleKey, autoCreate bool) Module {
 	return m.Modules.GetModule(key, autoCreate)
 }
 
@@ -59,13 +107,12 @@ func (m *testModel) GetFilter() any {
 }
 
 func (m *testModel) Release() {
-	m.ModelDirty.ClearDirty()
+	m.testModelDirty.ClearDirty()
 	m.Modules.Release()
 	m.mr = nil
 }
 
 type testModuleA struct {
-	testModuleBase[*testModuleA]
 	Value string
 }
 
@@ -74,7 +121,6 @@ func (m *testModuleA) OnInit() {}
 func (m *testModuleA) ModuleKey() string { return "A" }
 
 type testModuleB struct {
-	testModuleBase[*testModuleB]
 	Value string
 }
 
@@ -106,9 +152,9 @@ func TestModulesCodec(t *testing.T) {
 	modelSrc.ID = 1
 	modelSrc.Name = "test"
 	modelSrc.Modules.InitAllModules()
-	GetModuleOfContainer[*testModuleA](modelSrc, false).Value = "this is module A"
-	GetModuleOfContainer[*testModuleB](modelSrc, false).Value = "this is module B"
-	GetModuleOfContainer[*testModuleSA](modelSrc, false).Set(testPValue("123"))
+	GetModule[*testModuleA](modelSrc, false).Value = "this is module A"
+	GetModule[*testModuleB](modelSrc, false).Value = "this is module B"
+	GetModule[*testModuleSA](modelSrc, false).Set(testPValue("123"))
 	modelSrcBSON, err := bson.Marshal(modelSrc)
 	if err != nil {
 		t.Fatal(err)
@@ -130,18 +176,18 @@ func TestModulesCodec(t *testing.T) {
 		t.Fatalf("dst:%+v not equal src:%+v", modelDst, modelSrc)
 	}
 
-	GetModuleOfContainer[*testModuleA](modelDst, false).Value = "this is module AA"
-	GetModuleOfContainer[*testModuleA](modelDst, false).SetDirty()
-	GetModuleOfContainer[*testModuleB](modelDst, false).Value = "this is module BB"
-	GetModuleOfContainer[*testModuleB](modelDst, false).SetDirty()
-	if dirty, _ := modelDst.ModelDirty.IsDirty(); !dirty {
+	GetModule[*testModuleA](modelDst, false).Value = "this is module AA"
+	modelDst.SetModuleDirty(GetModule[*testModuleA](modelDst, false))
+	GetModule[*testModuleB](modelDst, false).Value = "this is module BB"
+	modelDst.SetModuleDirty(GetModule[*testModuleB](modelDst, false))
+	if dirty, _ := modelDst.testModelDirty.IsDirty(); !dirty {
 		t.Fatal("actorDst.DirtyMgr not dirty")
 	}
 
-	GetModuleOfContainer[*testModuleA](modelDst, false).Value = "this is module AAA"
-	GetModuleOfContainer[*testModuleA](modelDst, false).SetDirty()
-	GetModuleOfContainer[*testModuleB](modelDst, false).Value = "this is module BBB"
-	GetModuleOfContainer[*testModuleB](modelDst, false).SetDirty()
+	GetModule[*testModuleA](modelDst, false).Value = "this is module AAA"
+	modelDst.SetModuleDirty(GetModule[*testModuleA](modelDst, false))
+	GetModule[*testModuleB](modelDst, false).Value = "this is module BBB"
+	modelDst.SetModuleDirty(GetModule[*testModuleB](modelDst, false))
 	modelDstBSON, err = modelDst.MarshalBSONDirty()
 	if err != nil {
 		t.Fatal(err)
@@ -172,8 +218,8 @@ func TestModulesDirty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	GetModuleOfContainer[*testModuleA](model, false).Value = "this is module A"
-	GetModuleOfContainer[*testModuleA](model, false).SetDirty()
+	GetModule[*testModuleA](model, false).Value = "this is module A"
+	model.SetModuleDirty(GetModule[*testModuleA](model, false))
 	// GetModule[*testModuleB](model).Value = "this is module B"
 	// GetModule[*testModuleB](model).SetDirty()
 	modelDirtyBSON, err := model.MarshalBSONDirty()
