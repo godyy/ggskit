@@ -35,7 +35,4 @@ type ActorWithModel interface {
 
 	// GetModel 获取模型实例.
 	GetModel() Model
-
-	// OnModelDirty 通知模型存在脏数据.
-	OnModelDirty()
 }

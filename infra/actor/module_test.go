@@ -18,8 +18,8 @@ type testModelDirty struct {
 }
 
 // newTestModelDirty 构造脏数据模型.
-func newTestModelDirty(actor ActorWithModel) *testModelDirty {
-	return &testModelDirty{actor: actor}
+func newTestModelDirty() *testModelDirty {
+	return &testModelDirty{}
 }
 
 // SetDirty 设置脏数据.
@@ -28,13 +28,11 @@ func (md *testModelDirty) SetDirty(key string, value any) {
 		md.dirties = make(bson.M)
 	}
 	md.dirties[key] = value
-	md.actor.OnModelDirty()
 }
 
 // SetDirtyAll 设置全脏位.
 func (md *testModelDirty) SetDirtyAll() {
 	md.all = true
-	md.actor.OnModelDirty()
 }
 
 // IsDirty 是否有脏数据.
@@ -60,13 +58,6 @@ func (md *testModelDirty) Release() {
 	md.dirties = nil
 }
 
-type testActor struct {
-	ActorWithModel
-}
-
-func (ta *testActor) OnModelDirty() {
-}
-
 type testModel struct {
 	mr              *ModuleRegistry
 	ID              int64    `bson:"id"`
@@ -78,7 +69,7 @@ type testModel struct {
 func newTestModel(mr *ModuleRegistry) *testModel {
 	m := &testModel{
 		mr:             mr,
-		testModelDirty: newTestModelDirty(&testActor{}),
+		testModelDirty: newTestModelDirty(),
 	}
 	m.Modules = NewModules(mr)
 	return m

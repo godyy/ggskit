@@ -10,7 +10,9 @@ import (
 // ModelWithModule 模块模型接口.
 type ModelWithModule interface {
 	ModelDirty
-	ModuleContainer
+
+	// GetModule 获取模块实例.
+	GetModule(mk ModuleKey, autoCreate bool) Module
 }
 
 // ActorWithModule 包含数据模块的Actor接口.
@@ -32,15 +34,6 @@ type Module interface {
 
 	// OnInit 初始化模块, 在模块被创建时调用.
 	OnInit()
-}
-
-// ModuleContainer 模块容器.
-type ModuleContainer interface {
-	// GetModule 获取模块实例.
-	GetModule(mk ModuleKey, autoCreate bool) Module
-
-	// SetModuleDirty 设置模块脏位.
-	SetModuleDirty(mk ModuleKey)
 }
 
 // ModuleSingle 单值模块.
@@ -207,8 +200,8 @@ func RegisterModule[M Module](mr *ModuleRegistry) {
 }
 
 // GetModule 获取容器中的模块实例的泛型封装.
-func GetModule[M Module](mc ModuleContainer, autoCreate bool) (m M) {
-	module := mc.GetModule(m, autoCreate)
+func GetModule[M Module](model ModelWithModule, autoCreate bool) (m M) {
+	module := model.GetModule(m, autoCreate)
 	if module == nil {
 		panic("module " + m.ModuleKey() + " not exists")
 	}
@@ -222,16 +215,4 @@ func GetModule[M Module](mc ModuleContainer, autoCreate bool) (m M) {
 // GetActorModule 通过actor获取模块的通用泛型封装.
 func GetActorModule[M Module](actor ActorWithModule, autoCreate bool) M {
 	return GetModule[M](actor.GetModelWithModule(), autoCreate)
-}
-
-// SetActorModuleDirty 设置Actor数据模块脏位.
-func SetActorModuleDirty(actor ActorWithModule, mk ...ModuleKey) {
-	if len(mk) == 0 {
-		return
-	}
-	mm := actor.GetModelWithModule()
-	for _, mk := range mk {
-		mm.SetModuleDirty(mk)
-	}
-	actor.OnModelDirty()
 }
