@@ -46,6 +46,8 @@ github.com/goccy/go-yaml v1.19.2/go.mod h1:XBurs7gK8ATbW4ZPGKgcbrY1Br56PdM69F7Lk
 github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/godyy/gactor v0.1.1 h1:KTAeXjOQBvzmZL+cEQ5uHYWSpeUAlTbm+t8nfiGIN28=
 github.com/godyy/gactor v0.1.1/go.mod h1:yWfEUUi46MWUZkTQrF3MAFogepCztactXMJ+PR/epZU=
+github.com/godyy/gactor v0.1.2 h1:OQJIfr3eCGEurMUtKJuCnWIVpCEG2ght8phKHQqpwlg=
+github.com/godyy/gactor v0.1.2/go.mod h1:yWfEUUi46MWUZkTQrF3MAFogepCztactXMJ+PR/epZU=
 github.com/godyy/gcluster v0.0.11 h1:zJjRlROVEehwmizlVJctHKomBEAdUEiBxkB29eRYOM0=
 github.com/godyy/gcluster v0.0.11/go.mod h1:dsyUevggIOqqchzcCxc7rSJIJ68ufU5FJByDJpojGpI=
 github.com/godyy/glog v0.1.2 h1:rl5DSlOWQ75mwamKUdZk283ufZaKP2CuyvGkDQ35/HY=

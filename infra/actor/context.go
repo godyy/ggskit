@@ -9,26 +9,45 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	ctxKeySeq = "ctx:seq"
-)
-
 // Context
 type Context = gactor.Context
+
+type ctxK struct{}
+
+// CtxK 上下文kv的key.
+type CtxK[V any] struct {
+	*ctxK
+}
+
+// CtxV 上下文kv的value.
+type CtxV = any
+
+func NewCtxK[V CtxV]() CtxK[V] {
+	return CtxK[V]{ctxK: &ctxK{}}
+}
+
+// CtxKSet 通过CtxK设置Value.
+func CtxKSet[V CtxV](ctx *Context, k CtxK[V], v V) {
+	ctx.Set(k, v)
+}
+
+// CtxKGet 通过CtxK获取Value.
+func CtxKGet[V CtxV](ctx *Context, k CtxK[V]) (v V, exists bool) {
+	var vv any
+	vv, exists = ctx.Get(k)
+	if exists {
+		v = vv.(V)
+	}
+	return
+}
 
 // CtxActor 获取上下文中的 Actor, 泛型支持.
 func CtxActor[Actor ActorBehavior](ctx *Context) Actor {
 	return ctx.Actor().Behavior().(Actor)
 }
 
-// ctxSeq 获取上下中的请求序号, ctxKeySeq.
-func ctxSeq(ctx *Context) (uint32, bool) {
-	if v, ok := ctx.Get(ctxKeySeq); ok {
-		return v.(uint32), true
-	} else {
-		return 0, false
-	}
-}
+// ctxKSeq	 用于存储请求序号的key.
+var ctxKSeq = NewCtxK[uint32]()
 
 // ContextHelper 上下文帮助类.
 type ContextHelper struct {
@@ -49,7 +68,7 @@ func (h *ContextHelper) Decode(ctx *Context) (uint16, proto.Message, error) {
 		if err := ctx.Decode(&payload); err != nil {
 			return 0, nil, err
 		}
-		ctx.Set(ctxKeySeq, payload.Seq)
+		CtxKSet(ctx, ctxKSeq, payload.Seq)
 		return payload.PID, payload.Msg, nil
 	} else {
 		var payload S2SPayload
@@ -63,7 +82,7 @@ func (h *ContextHelper) Decode(ctx *Context) (uint16, proto.Message, error) {
 // Reply 回复.
 func (h *ContextHelper) Reply(ctx *Context, reply proto.Message) error {
 	if ctx.RequestType() == gactor.RequestTypeReq {
-		seq, ok := ctxSeq(ctx)
+		seq, ok := CtxKGet(ctx, ctxKSeq)
 		if !ok {
 			panic("ctx has no seq")
 		}
