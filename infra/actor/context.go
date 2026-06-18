@@ -49,20 +49,20 @@ func CtxActor[Actor ActorBehavior](ctx *Context) Actor {
 // ctxKSeq	 用于存储请求序号的key.
 var ctxKSeq = NewCtxK[uint32]()
 
-// ContextHelper 上下文帮助类.
-type ContextHelper struct {
+// ContextSugarUtil 上下文语法糖工具.
+type ContextSugarUtil struct {
 	*ProtoRegistry
 }
 
-// NewContextHelper 创建上下文帮助类.
-func NewContextHelper(protoRegistry *ProtoRegistry) *ContextHelper {
-	return &ContextHelper{
+// NewContextSugarUtil 创建上下文语法糖工具.
+func NewContextSugarUtil(protoRegistry *ProtoRegistry) *ContextSugarUtil {
+	return &ContextSugarUtil{
 		ProtoRegistry: protoRegistry,
 	}
 }
 
 // Decode 解码请求消息.
-func (h *ContextHelper) Decode(ctx *Context) (uint16, proto.Message, error) {
+func (h *ContextSugarUtil) Decode(ctx *Context) (uint16, proto.Message, error) {
 	if ctx.RequestType() == gactor.RequestTypeReq {
 		var payload C2SPayload
 		if err := ctx.Decode(&payload); err != nil {
@@ -80,7 +80,7 @@ func (h *ContextHelper) Decode(ctx *Context) (uint16, proto.Message, error) {
 }
 
 // Reply 回复.
-func (h *ContextHelper) Reply(ctx *Context, reply proto.Message) error {
+func (h *ContextSugarUtil) Reply(ctx *Context, reply proto.Message) error {
 	if ctx.RequestType() == gactor.RequestTypeReq {
 		seq, ok := CtxKGet(ctx, ctxKSeq)
 		if !ok {
@@ -101,7 +101,7 @@ func (h *ContextHelper) Reply(ctx *Context, reply proto.Message) error {
 }
 
 // RPCWithDeadline
-func (h *ContextHelper) RPCWithDeadline(ctx *Context, to ActorUID, args proto.Message, deadline time.Time) (proto.Message, error) {
+func (h *ContextSugarUtil) RPCWithDeadline(ctx *Context, to ActorUID, args proto.Message, deadline time.Time) (proto.Message, error) {
 	var (
 		argsPayload  S2SPayload
 		replyPayload S2SPayload
@@ -122,12 +122,12 @@ func (h *ContextHelper) RPCWithDeadline(ctx *Context, to ActorUID, args proto.Me
 }
 
 // RPCWithTimeout
-func (h *ContextHelper) RPCWithTimeout(ctx *Context, to ActorUID, args proto.Message, timeout time.Duration) (proto.Message, error) {
+func (h *ContextSugarUtil) RPCWithTimeout(ctx *Context, to ActorUID, args proto.Message, timeout time.Duration) (proto.Message, error) {
 	return h.RPCWithDeadline(ctx, to, args, time.Now().Add(timeout))
 }
 
 // RPC
-func (h *ContextHelper) RPC(ctx *Context, to ActorUID, args proto.Message) (proto.Message, error) {
+func (h *ContextSugarUtil) RPC(ctx *Context, to ActorUID, args proto.Message) (proto.Message, error) {
 	var (
 		argsPayload  S2SPayload
 		replyPayload S2SPayload
@@ -148,7 +148,7 @@ func (h *ContextHelper) RPC(ctx *Context, to ActorUID, args proto.Message) (prot
 }
 
 // RPCWithContext
-func (h *ContextHelper) RPCWithContext(ctx *Context, cctx context.Context, to ActorUID, args proto.Message) (proto.Message, error) {
+func (h *ContextSugarUtil) RPCWithContext(ctx *Context, cctx context.Context, to ActorUID, args proto.Message) (proto.Message, error) {
 	var (
 		argsPayload  S2SPayload
 		replyPayload S2SPayload
@@ -172,7 +172,7 @@ func (h *ContextHelper) RPCWithContext(ctx *Context, cctx context.Context, to Ac
 type ContextAsyncRPCCallback func(ctx *Context, reply proto.Message, err error)
 
 // ContextAsyncRPCCallback 上下文异步 RPC 回调.
-func (h *ContextHelper) handleAsyncRPCResp(ctx *Context, resp *gactor.RPCResp, callback ContextAsyncRPCCallback) {
+func (h *ContextSugarUtil) handleAsyncRPCResp(ctx *Context, resp *gactor.RPCResp, callback ContextAsyncRPCCallback) {
 	if err := resp.Err(); err != nil {
 		callback(ctx, nil, err)
 		return
@@ -188,7 +188,7 @@ func (h *ContextHelper) handleAsyncRPCResp(ctx *Context, resp *gactor.RPCResp, c
 }
 
 // AsyncRPCWithDeadline
-func (h *ContextHelper) AsyncRPCWithDeadline(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback, deadline time.Time) error {
+func (h *ContextSugarUtil) AsyncRPCWithDeadline(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback, deadline time.Time) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
@@ -200,12 +200,12 @@ func (h *ContextHelper) AsyncRPCWithDeadline(ctx *Context, to ActorUID, args pro
 }
 
 // AsyncRPCWithTimeout
-func (h *ContextHelper) AsyncRPCWithTimeout(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback, timeout time.Duration) error {
+func (h *ContextSugarUtil) AsyncRPCWithTimeout(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback, timeout time.Duration) error {
 	return h.AsyncRPCWithDeadline(ctx, to, args, callback, time.Now().Add(timeout))
 }
 
 // AsyncRPC
-func (h *ContextHelper) AsyncRPC(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback) error {
+func (h *ContextSugarUtil) AsyncRPC(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
@@ -217,7 +217,7 @@ func (h *ContextHelper) AsyncRPC(ctx *Context, to ActorUID, args proto.Message, 
 }
 
 // AsyncRPCWithContext
-func (h *ContextHelper) AsyncRPCWithContext(ctx *Context, cctx context.Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback) error {
+func (h *ContextSugarUtil) AsyncRPCWithContext(ctx *Context, cctx context.Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
@@ -229,7 +229,7 @@ func (h *ContextHelper) AsyncRPCWithContext(ctx *Context, cctx context.Context, 
 }
 
 // Cast
-func (h *ContextHelper) Cast(ctx *Context, to ActorUID, msg proto.Message) error {
+func (h *ContextSugarUtil) Cast(ctx *Context, to ActorUID, msg proto.Message) error {
 	payload, err := NewS2SPayload(msg, h.S2S)
 	if err != nil {
 		return err

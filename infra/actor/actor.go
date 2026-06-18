@@ -24,20 +24,20 @@ type Category = uint16
 // ActorUID
 type ActorUID = gactor.ActorUID
 
-// ActorHelper Actor帮助类.
-type ActorHelper struct {
+// ActorSugarUtil Actor语法糖工具.
+type ActorSugarUtil struct {
 	*ProtoRegistry
 }
 
-// NewActorHelper 创建Actor帮助类.
-func NewActorHelper(protoReg *ProtoRegistry) *ActorHelper {
-	return &ActorHelper{
+// NewActorSugarUtil 创建Actor语法糖工具.
+func NewActorSugarUtil(protoReg *ProtoRegistry) *ActorSugarUtil {
+	return &ActorSugarUtil{
 		ProtoRegistry: protoReg,
 	}
 }
 
 // PushRawMessage 向客户端推送消息.
-func (h *ActorHelper) PushRawMessage(actor CActor, msg proto.Message) error {
+func (h *ActorSugarUtil) PushRawMessage(actor CActor, msg proto.Message) error {
 	payload, err := NewC2SPayload(codecc2s.PtPush, 0, msg, h.C2S)
 	if err != nil {
 		return err
@@ -47,7 +47,7 @@ func (h *ActorHelper) PushRawMessage(actor CActor, msg proto.Message) error {
 
 // RPCWithDeadline 向 to 指向的 Actor 发起 RPC 调用.
 // deadline 为超时时间.
-func (h *ActorHelper) RPCWithDeadline(actor Actor, to ActorUID, args proto.Message, deadline time.Time) (proto.Message, error) {
+func (h *ActorSugarUtil) RPCWithDeadline(actor Actor, to ActorUID, args proto.Message, deadline time.Time) (proto.Message, error) {
 	var (
 		argsPayload  S2SPayload
 		replyPayload S2SPayload
@@ -68,13 +68,13 @@ func (h *ActorHelper) RPCWithDeadline(actor Actor, to ActorUID, args proto.Messa
 
 // RPCWithTimeout 向 to 指向的 Actor 发起 RPC 调用.
 // timeout 为超时间隔.
-func (h *ActorHelper) RPCWithTimeout(actor Actor, to ActorUID, args proto.Message, timeout time.Duration) (proto.Message, error) {
+func (h *ActorSugarUtil) RPCWithTimeout(actor Actor, to ActorUID, args proto.Message, timeout time.Duration) (proto.Message, error) {
 	return h.RPCWithDeadline(actor, to, args, time.Now().Add(timeout))
 }
 
 // RPC 向 to 指向的 Actor 发起 RPC 调用.
 // 使用配置的默认超时间隔.
-func (h *ActorHelper) RPC(actor Actor, to ActorUID, args proto.Message) (proto.Message, error) {
+func (h *ActorSugarUtil) RPC(actor Actor, to ActorUID, args proto.Message) (proto.Message, error) {
 	var (
 		argsPayload  S2SPayload
 		replyPayload S2SPayload
@@ -95,7 +95,7 @@ func (h *ActorHelper) RPC(actor Actor, to ActorUID, args proto.Message) (proto.M
 
 // RPCWithContext 向 to 指向的 Actor 发起 RPC 调用.
 // 超时 deadline 从 ctx 获取，若未设置, 使用默认超时时间.
-func (h *ActorHelper) RPCWithContext(ctx context.Context, actor Actor, to ActorUID, args proto.Message) (proto.Message, error) {
+func (h *ActorSugarUtil) RPCWithContext(ctx context.Context, actor Actor, to ActorUID, args proto.Message) (proto.Message, error) {
 	var (
 		argsPayload  S2SPayload
 		replyPayload S2SPayload
@@ -118,7 +118,7 @@ func (h *ActorHelper) RPCWithContext(ctx context.Context, actor Actor, to ActorU
 type ActorAsyncRPCCallback func(a gactor.Actor, reply proto.Message, err error)
 
 // handleAsyncRPCResp 处理异步RPC响应.
-func (h *ActorHelper) handleAsyncRPCResp(actor Actor, resp *gactor.RPCResp, callback ActorAsyncRPCCallback) {
+func (h *ActorSugarUtil) handleAsyncRPCResp(actor Actor, resp *gactor.RPCResp, callback ActorAsyncRPCCallback) {
 	if err := resp.Err(); err != nil {
 		callback(actor, nil, err)
 		return
@@ -135,7 +135,7 @@ func (h *ActorHelper) handleAsyncRPCResp(actor Actor, resp *gactor.RPCResp, call
 
 // AsyncRPCWithDeadline 向 to 指向的 Actor 发起异步 RPC 调用.
 // deadline 为超时时间.
-func (h *ActorHelper) AsyncRPCWithDeadline(actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback, deadline time.Time) error {
+func (h *ActorSugarUtil) AsyncRPCWithDeadline(actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback, deadline time.Time) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
@@ -148,13 +148,13 @@ func (h *ActorHelper) AsyncRPCWithDeadline(actor Actor, to ActorUID, args proto.
 
 // AsyncRPCWithTimeout 向 to 指向的 Actor 发起异步 RPC 调用.
 // timeout 为超时间隔.
-func (h *ActorHelper) AsyncRPCWithTimeout(actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback, timeout time.Duration) error {
+func (h *ActorSugarUtil) AsyncRPCWithTimeout(actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback, timeout time.Duration) error {
 	return h.AsyncRPCWithDeadline(actor, to, args, callback, time.Now().Add(timeout))
 }
 
 // AsyncRPC 向 to 指向的 Actor 发起异步 RPC 调用.
 // 使用配置的默认超时间隔.
-func (h *ActorHelper) AsyncRPC(actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback) error {
+func (h *ActorSugarUtil) AsyncRPC(actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
@@ -167,7 +167,7 @@ func (h *ActorHelper) AsyncRPC(actor Actor, to ActorUID, args proto.Message, cal
 
 // AsyncRPCWithContext 向 to 指向的 Actor 发起异步 RPC 调用.
 // 超时 deadline 从 ctx 获取，若未设置, 使用默认超时时间.
-func (h *ActorHelper) AsyncRPCWithContext(ctx context.Context, actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback) error {
+func (h *ActorSugarUtil) AsyncRPCWithContext(ctx context.Context, actor Actor, to ActorUID, args proto.Message, callback ActorAsyncRPCCallback) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
@@ -179,7 +179,7 @@ func (h *ActorHelper) AsyncRPCWithContext(ctx context.Context, actor Actor, to A
 
 // Cast 向 to 指向的 Actor 投递消息.
 // payload 为投递的负载消息.
-func (h *ActorHelper) Cast(actor Actor, to ActorUID, payload proto.Message) error {
+func (h *ActorSugarUtil) Cast(actor Actor, to ActorUID, payload proto.Message) error {
 	s2sPayload, err := NewS2SPayload(payload, h.S2S)
 	if err != nil {
 		return err
