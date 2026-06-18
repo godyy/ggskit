@@ -42,7 +42,7 @@ func (h *ActorSugarUtil) PushRawMessage(actor CActor, msg proto.Message) error {
 	if err != nil {
 		return err
 	}
-	return actor.PushRawMessage(payload)
+	return actor.PushRawMessage(&payload)
 }
 
 // RPCWithDeadline 向 to 指向的 Actor 发起 RPC 调用.
