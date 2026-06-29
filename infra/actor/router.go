@@ -64,7 +64,7 @@ func NewRouter(cfg RouterConfig) (*Router, error) {
 
 func actorUIDRouteKey(uid ActorUID) []byte {
 	var key [10]byte
-	binary.BigEndian.PutUint16(key[:2], uid.Category)
+	binary.BigEndian.PutUint16(key[:2], uint16(uid.Category))
 	binary.BigEndian.PutUint64(key[2:], uint64(uid.ID))
 	return key[:]
 }

@@ -19,7 +19,10 @@ type CActor = gactor.CActor
 type ActorBehavior = gactor.ActorBehavior
 
 // Category
-type Category = uint16
+type Category = gactor.Actor
+
+// ActorID.
+type ActorID = gactor.ActorID
 
 // ActorUID
 type ActorUID = gactor.ActorUID

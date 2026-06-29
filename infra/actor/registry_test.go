@@ -59,7 +59,7 @@ func setupRegistryTestDriver(tb testing.TB) *Registry {
 	return driver
 }
 
-func testActorUID(id int64) gactor.ActorUID {
+func testActorUID(id ActorID) gactor.ActorUID {
 	return gactor.ActorUID{
 		Category: 1,
 		ID:       id,
@@ -505,7 +505,7 @@ func BenchmarkRegistryRegisterActor(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
-		uid := testActorUID(int64(i + 1))
+		uid := testActorUID(ActorID(i + 1))
 		if _, err := driver.RegisterActor(gactor.ActorRegisterParams{
 			UID:     uid,
 			NodeId:  "node-bench",
@@ -564,7 +564,7 @@ func BenchmarkRegistryLookupActorParallel(b *testing.B) {
 	var nextID atomic.Int64
 
 	for i := range 128 {
-		uid := testActorUID(5000 + int64(i))
+		uid := testActorUID(ActorID(5000 + int64(i)))
 		if _, err := driver.RegisterActor(gactor.ActorRegisterParams{
 			UID:     uid,
 			NodeId:  "node-bench",
@@ -618,7 +618,7 @@ func BenchmarkRegistryKeepActorAliveParallel(b *testing.B) {
 	var nextID atomic.Int64
 
 	for i := range 128 {
-		uid := testActorUID(6000 + int64(i))
+		uid := testActorUID(ActorID(6000 + int64(i)))
 		if _, err := driver.RegisterActor(gactor.ActorRegisterParams{
 			UID:     uid,
 			NodeId:  "node-bench",
@@ -652,7 +652,7 @@ func BenchmarkRegistryUnregisterActor(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
-		uid := testActorUID(int64(3000 + i))
+		uid := testActorUID(ActorID(3000 + i))
 		if _, err := driver.RegisterActor(gactor.ActorRegisterParams{
 			UID:     uid,
 			NodeId:  "node-bench",
