@@ -25,9 +25,9 @@ func EncodePayload(reg ProtoRegistry, pid protocol.PID, msg proto.Message) ([]by
 	if err != nil {
 		return nil, pkgerrors.WithMessagef(err, "marshal msg of pid %d failed", pid)
 	}
-	payload := make([]byte, 2+len(msgBytes))
+	payload := make([]byte, 4+len(msgBytes))
 	binary.BigEndian.PutUint32(payload, uint32(pid))
-	copy(payload[2:], msgBytes)
+	copy(payload[4:], msgBytes)
 	return payload, nil
 }
 
@@ -41,7 +41,7 @@ func DecodePayload(reg ProtoRegistry, p []byte) (protocol.PID, proto.Message, er
 	if err != nil {
 		return 0, nil, pkgerrors.WithMessagef(err, "msg of pid %d not registered", pid)
 	}
-	if err := proto.Unmarshal(p[2:], msg); err != nil {
+	if err := proto.Unmarshal(p[4:], msg); err != nil {
 		return 0, nil, pkgerrors.WithMessagef(err, "unmarshal msg of pid %d failed", pid)
 	}
 	return pid, msg, nil

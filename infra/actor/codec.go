@@ -76,7 +76,7 @@ func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, e
 		if err != nil {
 			return nil, pkgerrors.WithMessagef(err, "marshal msg of pid %d failed", p.PID)
 		}
-		if err := allocator.AllocBuf(&buffer, 2+len(msgBytes)); err != nil {
+		if err := allocator.AllocBuf(&buffer, 4+len(msgBytes)); err != nil {
 			return nil, pkgerrors.WithMessagef(err, "alloc buf failed")
 		}
 		if err := buffer.WriteUint32(uint32(p.PID)); err != nil {
