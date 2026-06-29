@@ -6,6 +6,7 @@ import (
 
 	"github.com/godyy/gactor"
 	codecc2s "github.com/godyy/ggskit/base/codec/c2s"
+	"github.com/godyy/ggskit/base/protocol"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -62,7 +63,7 @@ func NewContextSugarUtil(protoRegistry *ProtoRegistry) *ContextSugarUtil {
 }
 
 // Decode 解码请求消息.
-func (h *ContextSugarUtil) Decode(ctx *Context) (uint16, proto.Message, error) {
+func (h *ContextSugarUtil) Decode(ctx *Context) (protocol.PID, proto.Message, error) {
 	if ctx.RequestType() == gactor.RequestTypeReq {
 		var payload C2SPayload
 		if err := ctx.Decode(&payload); err != nil {

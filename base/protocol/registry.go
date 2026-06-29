@@ -3,6 +3,7 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"reflect"
 
 	"google.golang.org/protobuf/proto"
@@ -10,44 +11,72 @@ import (
 
 // Registry 用于注册和创建 protobuf 协议结构体.
 type Registry struct {
-	pid2Type map[uint16]reflect.Type
-	type2Pid map[reflect.Type]uint16
-	name2Pid map[string]uint16
+	pid2Type map[PID]reflect.Type
+	type2Pid map[reflect.Type]PID
 }
 
 // NewRegistry 创建协议注册表.
 func NewRegistry() *Registry {
 	return &Registry{
-		pid2Type: make(map[uint16]reflect.Type),
-		type2Pid: make(map[reflect.Type]uint16),
-		name2Pid: make(map[string]uint16),
+		pid2Type: make(map[PID]reflect.Type),
+		type2Pid: make(map[reflect.Type]PID),
 	}
 }
 
 // Register 注册协议类型.
-func (r *Registry) Register(pid uint16, msg proto.Message) error {
+// pid 由消息类型名称哈希生成.
+func (r *Registry) Register(msg proto.Message) (PID, error) {
 	if msg == nil {
-		return errors.New("proto is nil")
+		return 0, errors.New("proto is nil")
 	}
 
 	typ := reflect.TypeOf(msg)
 	if typ.Kind() != reflect.Ptr {
-		return errors.New("proto must be pointer")
-	}
-
-	if _, exists := r.pid2Type[pid]; exists {
-		return fmt.Errorf("pid %d already registered", pid)
+		return 0, errors.New("proto must be pointer")
 	}
 
 	elemTyp := typ.Elem()
+	msgName := getMessageName(msg, elemTyp)
+	pid := hashPID(msgName)
+	if existsTyp, exists := r.pid2Type[pid]; exists {
+		if existsTyp != elemTyp {
+			return 0, fmt.Errorf("pid %d collision: %s(%s) conflicts with %s", pid, msgName, elemTyp.String(), existsTyp.String())
+		}
+		return pid, nil
+	}
+	if existsPid, exists := r.type2Pid[elemTyp]; exists {
+		if existsPid != pid {
+			return 0, fmt.Errorf("proto type %s already registered with pid %d (want %d)", elemTyp.String(), existsPid, pid)
+		}
+		return pid, nil
+	}
+
 	r.pid2Type[pid] = elemTyp
 	r.type2Pid[elemTyp] = pid
-	r.name2Pid[elemTyp.Name()] = pid
-	return nil
+	return pid, nil
+}
+
+// getMessageName 返回用于计算 PID 的消息名称.
+// 优先使用 protobuf 消息全名，避免不同包下同名消息冲突.
+func getMessageName(msg proto.Message, elemTyp reflect.Type) string {
+	if msgName := string(proto.MessageName(msg)); msgName != "" {
+		return msgName
+	}
+	if pkgPath := elemTyp.PkgPath(); pkgPath != "" {
+		return pkgPath + "." + elemTyp.Name()
+	}
+	return elemTyp.Name()
+}
+
+// hashPID 将消息名称稳定映射为 32 位协议 ID.
+func hashPID(name string) PID {
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(name))
+	return hasher.Sum32()
 }
 
 // GetPid 通过协议类型获取对象的协议 ID.
-func (r *Registry) GetPid(msg proto.Message) (uint16, bool) {
+func (r *Registry) GetPid(msg proto.Message) (PID, bool) {
 	typ := reflect.TypeOf(msg)
 	if typ.Kind() != reflect.Ptr {
 		return 0, false
@@ -62,18 +91,8 @@ func (r *Registry) GetPid(msg proto.Message) (uint16, bool) {
 	return pid, true
 }
 
-// GetPidByName 通过协议类型名称获取协议 ID.
-func (r *Registry) GetPidByName(name string) (uint16, bool) {
-	pid, exists := r.name2Pid[name]
-	if !exists {
-		return 0, false
-	}
-
-	return pid, true
-}
-
 // Create 通过协议 ID 创建协议实体.
-func (r *Registry) Create(pid uint16) (proto.Message, error) {
+func (r *Registry) Create(pid PID) (proto.Message, error) {
 	typ, exists := r.pid2Type[pid]
 	if !exists {
 		return nil, fmt.Errorf("pid %d not registered", pid)
@@ -83,18 +102,8 @@ func (r *Registry) Create(pid uint16) (proto.Message, error) {
 	return inst, nil
 }
 
-// CreateByName 通过协议类型名称创建协议实体.
-func (r *Registry) CreateByName(name string) (proto.Message, uint16, error) {
-	pid, exists := r.name2Pid[name]
-	if !exists {
-		return nil, 0, fmt.Errorf("%s not registered", name)
-	}
-
-	return reflect.New(r.pid2Type[pid]).Interface().(proto.Message), pid, nil
-}
-
 // Check 检查协议 ID 和协议类型是否匹配.
-func (r *Registry) Check(pid uint16, msg proto.Message) error {
+func (r *Registry) Check(pid PID, msg proto.Message) error {
 	pidTyp, exists := r.pid2Type[pid]
 	if !exists {
 		return fmt.Errorf("pid %d not registered", pid)

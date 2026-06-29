@@ -2,12 +2,14 @@ package c2s
 
 import (
 	"encoding/binary"
+
+	"github.com/godyy/ggskit/base/protocol"
 )
 
 const (
 	headPtLen  = 1                                   // 包头数据包类型长度
 	headSeqLen = 4                                   // 包头数据包序号长度
-	headPidLen = 2                                   // 包头数据包协议ID长度
+	headPidLen = 4                                   // 包头数据包协议ID长度
 	HeadLen    = headPtLen + headSeqLen + headPidLen // 包头长度
 
 	headSeqFirst = headPtLen
@@ -48,12 +50,12 @@ func HeadGetSeq(p []byte) uint32 {
 	return binary.BigEndian.Uint32(p[headSeqFirst:headPidFirst])
 }
 
-func HeadSetPid(p []byte, pid uint16) {
-	binary.BigEndian.PutUint16(p[headPidFirst:], pid)
+func HeadSetPid(p []byte, pid protocol.PID) {
+	binary.BigEndian.PutUint32(p[headPidFirst:], uint32(pid))
 }
 
-func HeadGetPid(p []byte) uint16 {
-	return binary.BigEndian.Uint16(p[headPidFirst:HeadLen])
+func HeadGetPid(p []byte) protocol.PID {
+	return binary.BigEndian.Uint32(p[headPidFirst:HeadLen])
 }
 
 // Head 数据包包头.
@@ -80,16 +82,16 @@ func (h *Head) SetSeq(seq uint32) {
 }
 
 // GetPid 获取协议ID.
-func (h *Head) GetPid() uint16 {
+func (h *Head) GetPid() protocol.PID {
 	return HeadGetPid(h[:])
 }
 
 // SetPid 设置协议ID.
-func (h *Head) SetPid(pid uint16) {
+func (h *Head) SetPid(pid protocol.PID) {
 	HeadSetPid(h[:], pid)
 }
 
-func NewHead(pt int8, seq uint32, pid uint16) Head {
+func NewHead(pt int8, seq uint32, pid protocol.PID) Head {
 	h := Head{}
 	h.SetPt(pt)
 	h.SetSeq(seq)

@@ -4,14 +4,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/godyy/ggskit/base/protocol"
 	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 )
 
 // ProtoRegistry 提供 C2S 编解码所需的协议注册能力.
 type ProtoRegistry interface {
-	GetPid(msg proto.Message) (uint16, bool)
-	Create(pid uint16) (proto.Message, error)
+	GetPid(msg proto.Message) (protocol.PID, bool)
+	Create(pid protocol.PID) (proto.Message, error)
 }
 
 // DecodeMessage 解码数据包中的消息.
