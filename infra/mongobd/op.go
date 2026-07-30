@@ -154,3 +154,34 @@ func (o *OpUpdate) exec(client *mongo.Client) {
 	_, err := coll.UpdateOne(o.ctx, o.Filter, bson.M{"$set": o.Update}, updateOneOpts)
 	opDone(o, err)
 }
+
+// OpBulk 批量操作操作符
+type OpBulk struct {
+	opBase
+	Models  []mongo.WriteModel // 批量操作模型列表
+	Ordered bool               // 是否有序执行
+}
+
+func (o *OpBulk) SetModels(models []mongo.WriteModel) *OpBulk {
+	o.Models = models
+	return o
+}
+
+func (o *OpBulk) AddModel(model mongo.WriteModel) *OpBulk {
+	o.Models = append(o.Models, model)
+	return o
+}
+
+func (o *OpBulk) SetOrdered(ordered bool) *OpBulk {
+	o.Ordered = ordered
+	return o
+}
+
+// exec 批量操作操作符执行逻辑.
+func (o *OpBulk) exec(client *mongo.Client) {
+	coll := client.Database(o.DB).Collection(o.Coll)
+
+	bulkWriteOpts := options.BulkWrite().SetOrdered(o.Ordered)
+	_, err := coll.BulkWrite(o.ctx, o.Models, bulkWriteOpts)
+	opDone(o, err)
+}
