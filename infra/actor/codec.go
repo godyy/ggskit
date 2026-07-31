@@ -104,8 +104,22 @@ func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, e
 func (c *Codec) EncodePayload(pt gactor.PacketType, payload any) ([]byte, error) {
 	switch pt {
 	case gactor.PacketTypeRawPush, gactor.PacketTypeS2SForward:
+		var buffer gactor.Buffer
 		p := payload.(*C2SPayload)
-		return codecs2s.EncodePayload(c.C2S, p.PID, p.Msg)
+		msgBytes, err := proto.Marshal(p.Msg)
+		if err != nil {
+			return nil, pkgerrors.WithMessagef(err, "marshal msg of pid %d failed", p.PID)
+		}
+		head := codecc2s.NewHead(p.Pt, p.Seq, p.PID)
+		buffer.Grow(len(head) + len(msgBytes))
+		if _, err := buffer.Write(head[:]); err != nil {
+			return nil, pkgerrors.WithMessage(err, "write head to buf failed")
+		}
+		if _, err := buffer.Write(msgBytes); err != nil {
+			return nil, pkgerrors.WithMessage(err, "write msg to buf failed")
+		}
+		return buffer.Data(), nil
+
 	case gactor.PacketTypeS2SRpc, gactor.PacketTypeS2SCast:
 		p := payload.(*S2SPayload)
 		return codecs2s.EncodePayload(c.S2S, p.PID, p.Msg)
