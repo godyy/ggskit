@@ -49,11 +49,11 @@ func (c *Codec) PutBytes(b []byte) {
 // 数据包类型包括:
 //
 //	PacketTypeRawResp, PacketTypeRawPush
-//	PacketTypeS2SRpc, PacketTypeS2SRpcResp, PacketTypeS2SCast
+//	PacketTypeS2SRpc, PacketTypeS2SRpcResp, PacketTypeS2SCast, PacketTypeS2SForward
 func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, error) {
 	var buffer gactor.Buffer
 	switch allocator.PacketType() {
-	case gactor.PacketTypeRawResp, gactor.PacketTypeRawPush:
+	case gactor.PacketTypeRawResp, gactor.PacketTypeRawPush, gactor.PacketTypeS2SForward:
 		p := payload.(*C2SPayload)
 		msgBytes, err := proto.Marshal(p.Msg)
 		if err != nil {
@@ -99,10 +99,19 @@ func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, e
 // 根据数据包类型 pt 编码 payload 并生成数据切片返回.
 // 数据包类型包括:
 //
-//	PacketTypeS2SRpc, PacketTypeS2SCast
+//	PacketTypeRawPush
+//	PacketTypeS2SRpc, PacketTypeS2SCast, PacketTypeS2SForward
 func (c *Codec) EncodePayload(pt gactor.PacketType, payload any) ([]byte, error) {
-	p := payload.(*S2SPayload)
-	return codecs2s.EncodePayload(c.S2S, p.PID, p.Msg)
+	switch pt {
+	case gactor.PacketTypeRawPush, gactor.PacketTypeS2SForward:
+		p := payload.(*C2SPayload)
+		return codecs2s.EncodePayload(c.C2S, p.PID, p.Msg)
+	case gactor.PacketTypeS2SRpc, gactor.PacketTypeS2SCast:
+		p := payload.(*S2SPayload)
+		return codecs2s.EncodePayload(c.S2S, p.PID, p.Msg)
+	default:
+		return nil, errors.New("not implemented")
+	}
 }
 
 // DecodePayload 解码负载数据.
