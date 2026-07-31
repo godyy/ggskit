@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/godyy/gactor"
+	codecc2s "github.com/godyy/ggskit/base/codec/c2s"
 	"github.com/godyy/glog"
 	"google.golang.org/protobuf/proto"
 )
@@ -201,4 +202,13 @@ func (s *Service) Cast(to ActorUID, msg proto.Message) error {
 		return err
 	}
 	return s.core.Cast(to, &payload)
+}
+
+// Forward 向目标Actor透传消息.
+func (s *Service) Forward(to ActorUID, msg proto.Message) error {
+	payload, err := NewC2SPayload(codecc2s.PtPush, 0, msg, s.C2S)
+	if err != nil {
+		return err
+	}
+	return s.core.Forward(to, &payload)
 }
