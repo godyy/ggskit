@@ -121,7 +121,7 @@ func (h *ActorSugarUtil) RPCWithContext(ctx context.Context, actor Actor, to Act
 type ActorAsyncRPCCallback func(a gactor.Actor, reply proto.Message, err error)
 
 // handleAsyncRPCResp 处理异步RPC响应.
-func (h *ActorSugarUtil) handleAsyncRPCResp(actor Actor, resp *gactor.RPCResp, callback ActorAsyncRPCCallback) {
+func (h *ActorSugarUtil) handleAsyncRPCResp(actor Actor, resp gactor.RPCResp, callback ActorAsyncRPCCallback) {
 	if err := resp.Err(); err != nil {
 		callback(actor, nil, err)
 		return
@@ -144,7 +144,7 @@ func (h *ActorSugarUtil) AsyncRPCWithDeadline(actor Actor, to ActorUID, args pro
 		return err
 	}
 
-	return actor.AsyncRPCWithDeadline(to, &argsPayload, func(a gactor.Actor, resp *gactor.RPCResp) {
+	return actor.AsyncRPCWithDeadline(to, &argsPayload, func(a gactor.Actor, resp gactor.RPCResp) {
 		h.handleAsyncRPCResp(a, resp, callback)
 	}, deadline)
 }
@@ -163,7 +163,7 @@ func (h *ActorSugarUtil) AsyncRPC(actor Actor, to ActorUID, args proto.Message, 
 		return err
 	}
 
-	return actor.AsyncRPC(to, &argsPayload, func(a gactor.Actor, resp *gactor.RPCResp) {
+	return actor.AsyncRPC(to, &argsPayload, func(a gactor.Actor, resp gactor.RPCResp) {
 		h.handleAsyncRPCResp(a, resp, callback)
 	})
 }
@@ -175,7 +175,7 @@ func (h *ActorSugarUtil) AsyncRPCWithContext(ctx context.Context, actor Actor, t
 	if err != nil {
 		return err
 	}
-	return actor.AsyncRPCWithContext(ctx, to, &argsPayload, func(a gactor.Actor, resp *gactor.RPCResp) {
+	return actor.AsyncRPCWithContext(ctx, to, &argsPayload, func(a gactor.Actor, resp gactor.RPCResp) {
 		h.handleAsyncRPCResp(a, resp, callback)
 	})
 }

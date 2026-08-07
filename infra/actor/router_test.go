@@ -76,7 +76,7 @@ func TestRouterPickActorNodeNotExists(t *testing.T) {
 		Category: 1,
 		ID:       1002,
 	})
-	if !errors.Is(err, gactor.ErrActorNotExists) {
+	if !errors.Is(err, gactor.ErrNoAvailableNode) {
 		t.Fatalf("expected ErrActorNotExists, got %v", err)
 	}
 }

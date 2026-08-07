@@ -136,7 +136,7 @@ func (s *Service) RPCWithContext(ctx context.Context, to ActorUID, args proto.Me
 // ServiceAsyncRPCCallback Service专用异步RPC回调.
 type ServiceAsyncRPCCallback func(reply proto.Message, err error)
 
-func (s *Service) handleAsyncRPCResp(r *gactor.RPCResp, callback ServiceAsyncRPCCallback) {
+func (s *Service) handleAsyncRPCResp(r gactor.RPCResp, callback ServiceAsyncRPCCallback) {
 	if err := r.Err(); err != nil {
 		callback(nil, err)
 		return
@@ -159,7 +159,7 @@ func (s *Service) AsyncRPCWithDeadline(to ActorUID, args proto.Message, callback
 		return err
 	}
 
-	return s.core.AsyncRPCWithDeadline(to, &argsPayload, func(r *gactor.RPCResp) {
+	return s.core.AsyncRPCWithDeadline(to, &argsPayload, func(r gactor.RPCResp) {
 		s.handleAsyncRPCResp(r, callback)
 	}, deadline)
 }
@@ -177,7 +177,7 @@ func (s *Service) AsyncRPC(to ActorUID, args proto.Message, callback ServiceAsyn
 		return err
 	}
 
-	return s.core.AsyncRPC(to, &argsPayload, func(r *gactor.RPCResp) {
+	return s.core.AsyncRPC(to, &argsPayload, func(r gactor.RPCResp) {
 		s.handleAsyncRPCResp(r, callback)
 	})
 }
@@ -190,7 +190,7 @@ func (s *Service) AsyncRPCWithContext(ctx context.Context, to ActorUID, args pro
 		return err
 	}
 
-	return s.core.AsyncRPCWithContext(ctx, to, &argsPayload, func(r *gactor.RPCResp) {
+	return s.core.AsyncRPCWithContext(ctx, to, &argsPayload, func(r gactor.RPCResp) {
 		s.handleAsyncRPCResp(r, callback)
 	})
 }

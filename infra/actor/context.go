@@ -173,7 +173,7 @@ func (h *ContextSugarUtil) RPCWithContext(ctx *Context, cctx context.Context, to
 type ContextAsyncRPCCallback func(ctx *Context, reply proto.Message, err error)
 
 // ContextAsyncRPCCallback 上下文异步 RPC 回调.
-func (h *ContextSugarUtil) handleAsyncRPCResp(ctx *Context, resp *gactor.RPCResp, callback ContextAsyncRPCCallback) {
+func (h *ContextSugarUtil) handleAsyncRPCResp(ctx *Context, resp gactor.RPCResp, callback ContextAsyncRPCCallback) {
 	if err := resp.Err(); err != nil {
 		callback(ctx, nil, err)
 		return
@@ -195,7 +195,7 @@ func (h *ContextSugarUtil) AsyncRPCWithDeadline(ctx *Context, to ActorUID, args 
 		return err
 	}
 
-	return ctx.AsyncRPCWithDeadline(to, &argsPayload, func(ctx *Context, resp *gactor.RPCResp) {
+	return ctx.AsyncRPCWithDeadline(to, &argsPayload, func(ctx *Context, resp gactor.RPCResp) {
 		h.handleAsyncRPCResp(ctx, resp, callback)
 	}, deadline)
 }
@@ -212,7 +212,7 @@ func (h *ContextSugarUtil) AsyncRPC(ctx *Context, to ActorUID, args proto.Messag
 		return err
 	}
 
-	return ctx.AsyncRPC(to, &argsPayload, func(ctx *Context, resp *gactor.RPCResp) {
+	return ctx.AsyncRPC(to, &argsPayload, func(ctx *Context, resp gactor.RPCResp) {
 		h.handleAsyncRPCResp(ctx, resp, callback)
 	})
 }
@@ -224,7 +224,7 @@ func (h *ContextSugarUtil) AsyncRPCWithContext(ctx *Context, cctx context.Contex
 		return err
 	}
 
-	return ctx.AsyncRPCWithContext(cctx, to, &argsPayload, func(ctx *Context, resp *gactor.RPCResp) {
+	return ctx.AsyncRPCWithContext(cctx, to, &argsPayload, func(ctx *Context, resp gactor.RPCResp) {
 		h.handleAsyncRPCResp(ctx, resp, callback)
 	})
 }
