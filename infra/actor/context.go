@@ -13,6 +13,9 @@ import (
 // Context
 type Context = gactor.Context
 
+// ContextSuspender
+type ContextSuspender = gactor.ContextSuspender
+
 type ctxK struct{}
 
 // CtxK 上下文kv的key.

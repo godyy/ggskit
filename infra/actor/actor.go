@@ -27,6 +27,12 @@ type ActorID = gactor.ActorID
 // ActorUID
 type ActorUID = gactor.ActorUID
 
+// ActorFunc
+type ActorFunc = gactor.ActorFunc
+
+// ActorAsyncCaller
+type ActorAsyncCaller = gactor.ActorAsyncCaller
+
 // ActorSugarUtil Actor语法糖工具.
 type ActorSugarUtil struct {
 	*ProtoRegistry
