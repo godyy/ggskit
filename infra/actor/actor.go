@@ -33,6 +33,11 @@ type ActorFunc = gactor.ActorFunc
 // ActorAsyncCaller
 type ActorAsyncCaller = gactor.ActorAsyncCaller
 
+// ToActor 将 Actor 转换为指定行为的 Actor.
+func ToActor[AB ActorBehavior](actor Actor) AB {
+	return actor.Behavior().(AB)
+}
+
 // ActorSugarUtil Actor语法糖工具.
 type ActorSugarUtil struct {
 	*ProtoRegistry
@@ -123,23 +128,30 @@ func (h *ActorSugarUtil) RPCWithContext(ctx context.Context, actor Actor, to Act
 	return replyPayload.Msg, nil
 }
 
+// ActorRPCResp Actor RPC 响应.
+type ActorRPCResp struct {
+	Actor Actor         // Actor.
+	Reply proto.Message // 回复消息.
+	Err   error         // 错误.
+}
+
 // ActorAsyncRPCCallback Actor异步RPC回调.
-type ActorAsyncRPCCallback func(a gactor.Actor, reply proto.Message, err error)
+type ActorAsyncRPCCallback func(resp ActorRPCResp)
 
 // handleAsyncRPCResp 处理异步RPC响应.
 func (h *ActorSugarUtil) handleAsyncRPCResp(actor Actor, resp gactor.RPCResp, callback ActorAsyncRPCCallback) {
 	if err := resp.Err(); err != nil {
-		callback(actor, nil, err)
+		callback(ActorRPCResp{Actor: actor, Reply: nil, Err: err})
 		return
 	}
 
 	var replyPayload S2SPayload
 	if err := resp.DecodeReply(&replyPayload); err != nil {
-		callback(actor, nil, err)
+		callback(ActorRPCResp{Actor: actor, Reply: nil, Err: err})
 		return
 	}
 
-	callback(actor, replyPayload.Msg, nil)
+	callback(ActorRPCResp{Actor: actor, Reply: replyPayload.Msg, Err: nil})
 }
 
 // AsyncRPCWithDeadline 向 to 指向的 Actor 发起异步 RPC 调用.

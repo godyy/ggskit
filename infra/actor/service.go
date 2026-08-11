@@ -133,22 +133,28 @@ func (s *Service) RPCWithContext(ctx context.Context, to ActorUID, args proto.Me
 	return replyPayload.Msg, nil
 }
 
+// ServiceRPCResp Service RPC 响应.
+type ServiceRPCResp struct {
+	Reply proto.Message // 回复消息.
+	Err   error         // 错误.
+}
+
 // ServiceAsyncRPCCallback Service专用异步RPC回调.
-type ServiceAsyncRPCCallback func(reply proto.Message, err error)
+type ServiceAsyncRPCCallback func(resp ServiceRPCResp)
 
 func (s *Service) handleAsyncRPCResp(r gactor.RPCResp, callback ServiceAsyncRPCCallback) {
 	if err := r.Err(); err != nil {
-		callback(nil, err)
+		callback(ServiceRPCResp{Reply: nil, Err: err})
 		return
 	}
 
 	var replyPayload S2SPayload
 	if err := r.DecodeReply(&replyPayload); err != nil {
-		callback(nil, err)
+		callback(ServiceRPCResp{Reply: nil, Err: err})
 		return
 	}
 
-	callback(replyPayload.Msg, nil)
+	callback(ServiceRPCResp{Reply: replyPayload.Msg, Err: nil})
 }
 
 // AsyncRPCWithDeadline 向 to 指向的 Actor 发起异步 RPC 调用.

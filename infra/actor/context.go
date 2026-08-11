@@ -50,6 +50,11 @@ func CtxActor[Actor ActorBehavior](ctx *Context) Actor {
 	return ctx.Actor().Behavior().(Actor)
 }
 
+// CtxActorModule 获取上下文中的 Actor 模块, 泛型支持.
+func CtxActorModule[M Module](ctx *Context, autoCreate bool) M {
+	return GetActorModule[M](ctx.Actor().Behavior().(ActorWithModule), autoCreate)
+}
+
 // ctxKSeq	 用于存储请求序号的key.
 var ctxKSeq = NewCtxK[uint32]()
 
@@ -172,23 +177,30 @@ func (h *ContextSugarUtil) RPCWithContext(ctx *Context, cctx context.Context, to
 	return replyPayload.Msg, nil
 }
 
+// ContextRPCResp 上下文 RPC 响应.
+type ContextRPCResp struct {
+	Ctx   *Context      // 上下文.
+	Reply proto.Message // 回复消息.
+	Err   error         // 错误.
+}
+
 // ContextAsyncRPCCallback 上下文异步 RPC 回调.
-type ContextAsyncRPCCallback func(ctx *Context, reply proto.Message, err error)
+type ContextAsyncRPCCallback func(resp ContextRPCResp)
 
 // ContextAsyncRPCCallback 上下文异步 RPC 回调.
 func (h *ContextSugarUtil) handleAsyncRPCResp(ctx *Context, resp gactor.RPCResp, callback ContextAsyncRPCCallback) {
 	if err := resp.Err(); err != nil {
-		callback(ctx, nil, err)
+		callback(ContextRPCResp{Ctx: ctx, Reply: nil, Err: err})
 		return
 	}
 
 	var replyPayload S2SPayload
 	if err := resp.DecodeReply(&replyPayload); err != nil {
-		callback(ctx, nil, err)
+		callback(ContextRPCResp{Ctx: ctx, Reply: nil, Err: err})
 		return
 	}
 
-	callback(ctx, replyPayload.Msg, nil)
+	callback(ContextRPCResp{Ctx: ctx, Reply: replyPayload.Msg, Err: nil})
 }
 
 // AsyncRPCWithDeadline
