@@ -16,6 +16,12 @@ type Context = gactor.Context
 // ContextSuspender
 type ContextSuspender = gactor.ContextSuspender
 
+// ContextFuncArgs
+type ContextFuncArgs = gactor.ContextFuncArgs
+
+// ContextFunc
+type ContextFunc = gactor.ContextFunc
+
 type ctxK struct{}
 
 // CtxK 上下文kv的key.

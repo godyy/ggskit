@@ -27,11 +27,20 @@ type ActorID = gactor.ActorID
 // ActorUID
 type ActorUID = gactor.ActorUID
 
+// ActorFuncArgs
+type ActorFuncArgs = gactor.ActorFuncArgs
+
 // ActorFunc
 type ActorFunc = gactor.ActorFunc
 
 // ActorAsyncCaller
 type ActorAsyncCaller = gactor.ActorAsyncCaller
+
+// ActorTimerArgs
+type ActorTimerArgs = gactor.ActorTimerArgs
+
+// ActorTimerFunc
+type ActorTimerFunc = gactor.ActorTimerFunc
 
 // ToActor 将 Actor 转换为指定行为的 Actor.
 func ToActor[AB ActorBehavior](actor Actor) AB {

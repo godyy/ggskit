@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/gin-gonic/gin v1.12.0
-	github.com/godyy/gactor v0.2.1
+	github.com/godyy/gactor v0.3.0
 	github.com/godyy/gcluster v0.0.12
 	github.com/godyy/glog v0.1.2
 	github.com/godyy/grendezvous v0.1.2
@@ -36,7 +36,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godyy/gmpsc v0.0.4 // indirect
 	github.com/godyy/gnet v0.3.0 // indirect
-	github.com/godyy/gtimewheel v0.1.1 // indirect
+	github.com/godyy/gtimewheel v0.3.0 // indirect
 	github.com/godyy/gutils v0.0.4 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect

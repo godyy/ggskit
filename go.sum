@@ -46,6 +46,8 @@ github.com/goccy/go-yaml v1.19.2/go.mod h1:XBurs7gK8ATbW4ZPGKgcbrY1Br56PdM69F7Lk
 github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/godyy/gactor v0.2.1 h1:BFKchIR0sxhSeV2tF8pwIIlJ3TOnEo5unXdsQY5HNYk=
 github.com/godyy/gactor v0.2.1/go.mod h1:xRCqzb7tclioEdRCr+YdfVsZmaSh5n2oP9EdTXP8pOM=
+github.com/godyy/gactor v0.3.0 h1:V8pMEryDZexCSv4pRXPLRnFFd8pMxEbgfZbJ1CRowWo=
+github.com/godyy/gactor v0.3.0/go.mod h1:QYy2jZliB8guqFzhrl2SSD2tRl8G93nZYQMc3c8OaZU=
 github.com/godyy/gcluster v0.0.12 h1:6JulPiCmapsr3luT6Wibt/RhI4bF7isJcq65xF3fbbY=
 github.com/godyy/gcluster v0.0.12/go.mod h1:+nX3TStOG8t6/8SkyI2kYpNIvOLNL7mKjRjbkGSCBGs=
 github.com/godyy/glog v0.1.2 h1:rl5DSlOWQ75mwamKUdZk283ufZaKP2CuyvGkDQ35/HY=
@@ -58,6 +60,8 @@ github.com/godyy/grendezvous v0.1.2 h1:hcD2NTn5mkLfhL3UOSl9VDeOKEAITjHtcwd44pFfh
 github.com/godyy/grendezvous v0.1.2/go.mod h1:xiBW+oybgIhzfyNWbdMxWJvHnllDXBfZYrafiqLdgqE=
 github.com/godyy/gtimewheel v0.1.1 h1:T8q9YapvMZ9FZpSXnS7/igQbgf3Qoy/z66GCDv9Sntw=
 github.com/godyy/gtimewheel v0.1.1/go.mod h1:wOmNKjkpEz03ACVNdQ58DVr6mAKliRGdE+0MA/piZME=
+github.com/godyy/gtimewheel v0.3.0 h1:1lRDUV3n5qMJLs0HiK15oSrdmRVuGJrs/12ShcAI2Ek=
+github.com/godyy/gtimewheel v0.3.0/go.mod h1:CjqMSejQ4DAJrdEsBJTwv0Gn/XPkljGQ9VAMLxWlFe4=
 github.com/godyy/gutils v0.0.4 h1:Etjj/hZd3zsdD2RzadO487meAoahO+fhFLkORMLl9jw=
 github.com/godyy/gutils v0.0.4/go.mod h1:tiC0oUfJ776tohwuwtQt0CR1qA0e3OO3qhDFVVZhBvw=
 github.com/gogo/protobuf v1.3.2 h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=
