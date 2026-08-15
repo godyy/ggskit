@@ -29,7 +29,7 @@ func setupServerStoreTestDriver(tb testing.TB) *ServerStore {
 	tb.Helper()
 
 	driver := setupRegistryTestDriver(tb)
-	store, err := NewServerStore(driver.redisCli)
+	store, err := NewServerStore(driver.cfg.RedisCli)
 	if err != nil {
 		tb.Fatalf("new server store: %v", err)
 	}

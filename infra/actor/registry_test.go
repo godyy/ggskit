@@ -3,6 +3,7 @@ package actor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -22,7 +23,9 @@ func newUncheckedRegistry(tb testing.TB) *Registry {
 	tb.Cleanup(func() {
 		_ = client.Close()
 	})
-	driver, err := NewRegistry(client)
+	driver, err := NewRegistry(&RegistryConfig{
+		RedisCli: client,
+	})
 	if err != nil {
 		tb.Fatalf("new registry: %v", err)
 	}
@@ -52,7 +55,9 @@ func setupRegistryTestDriver(tb testing.TB) *Registry {
 		_ = client.Close()
 	})
 
-	driver, err := NewRegistry(client)
+	driver, err := NewRegistry(&RegistryConfig{
+		RedisCli: client,
+	})
 	if err != nil {
 		tb.Fatalf("new registry: %v", err)
 	}
@@ -277,6 +282,82 @@ func TestRegistryTTLExpiry(t *testing.T) {
 	}
 }
 
+func TestRegistrySupportsLegacyJSONStringValue(t *testing.T) {
+	driver := setupRegistryTestDriver(t)
+	uid := testActorUID(10041)
+	regKey := genActorRegKey(uid)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	legacyValue := `{"UID":{"Category":1,"ID":10041},"NodeId":"node-a","LeaseId":"lease-a"}`
+	if err := driver.cfg.RedisCli.Set(ctx, regKey, legacyValue, 5*time.Second).Err(); err != nil {
+		t.Fatalf("seed legacy actor registry: %v", err)
+	}
+
+	actorLoc, err := driver.GetActorLocation(uid)
+	if err != nil {
+		t.Fatalf("lookup legacy actor registry: %v", err)
+	}
+	if actorLoc.NodeId != "node-a" {
+		t.Fatalf("unexpected actor registry node id: %s", actorLoc.NodeId)
+	}
+
+	if keepAliveErr := driver.KeepActorAlive(gactor.ActorKeepAliveParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+		TTL:     3,
+	}); keepAliveErr != nil {
+		t.Fatalf("keep legacy actor alive: %v", keepAliveErr)
+	}
+
+	entryType, err := driver.cfg.RedisCli.Type(ctx, regKey).Result()
+	if err != nil {
+		t.Fatalf("read migrated actor registry type: %v", err)
+	}
+	if entryType != "string" {
+		t.Fatalf("expected keepalive to preserve legacy string layout, got %s", entryType)
+	}
+
+	if unregisterErr := driver.UnregisterActor(gactor.ActorUnregisterParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+	}); unregisterErr != nil {
+		t.Fatalf("unregister legacy actor: %v", unregisterErr)
+	}
+
+	if _, lookupErr := driver.GetActorLocation(uid); !errors.Is(lookupErr, gactor.ErrActorNotExists) {
+		t.Fatalf("expected legacy actor to be removed, got %v", lookupErr)
+	}
+
+	if _, registerErr := driver.RegisterActor(gactor.ActorRegisterParams{
+		UID:     uid,
+		NodeId:  "node-b",
+		LeaseId: "lease-b",
+		TTL:     5,
+	}); registerErr != nil {
+		t.Fatalf("register actor after legacy cleanup: %v", registerErr)
+	}
+
+	entryType, err = driver.cfg.RedisCli.Type(ctx, regKey).Result()
+	if err != nil {
+		t.Fatalf("read migrated actor registry type after register: %v", err)
+	}
+	if entryType != "hash" {
+		t.Fatalf("expected new register to use hash layout, got %s", entryType)
+	}
+
+	values, err := driver.cfg.RedisCli.HMGet(ctx, regKey, "node_id", "lease_id").Result()
+	if err != nil {
+		t.Fatalf("read migrated actor registry hash fields: %v", err)
+	}
+	if fmt.Sprint(values[0]) != "node-b" || fmt.Sprint(values[1]) != "lease-b" {
+		t.Fatalf("unexpected migrated hash values: %#v", values)
+	}
+}
+
 func TestRegistryConcurrentRegister(t *testing.T) {
 	driver := setupRegistryTestDriver(t)
 	uid := testActorUID(1005)
@@ -335,6 +416,65 @@ func TestRegistryConcurrentRegister(t *testing.T) {
 	if actorLoc.NodeId != winnerNodeId {
 		t.Fatalf("stored winner mismatch: got=%s want=%s", actorLoc.NodeId, winnerNodeId)
 	}
+}
+
+func TestRegistryPubSubInvalidatesLocalCache(t *testing.T) {
+	driverA := setupRegistryTestDriver(t)
+
+	clientB := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   14,
+	})
+	t.Cleanup(func() {
+		_ = clientB.Close()
+	})
+
+	driverB, err := NewRegistry(&RegistryConfig{
+		RedisCli: clientB,
+	})
+	if err != nil {
+		t.Fatalf("new secondary registry: %v", err)
+	}
+
+	uid := testActorUID(1006)
+	if _, regErr := driverA.RegisterActor(gactor.ActorRegisterParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+		TTL:     5,
+	}); regErr != nil {
+		t.Fatalf("register actor: %v", regErr)
+	}
+
+	actorLoc, err := driverB.GetActorLocation(uid)
+	if err != nil {
+		t.Fatalf("lookup actor registry: %v", err)
+	}
+	if actorLoc.NodeId != "node-a" {
+		t.Fatalf("unexpected actor registry node id: %s", actorLoc.NodeId)
+	}
+
+	if unregisterErr := driverA.UnregisterActor(gactor.ActorUnregisterParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+	}); unregisterErr != nil {
+		t.Fatalf("unregister actor: %v", unregisterErr)
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		_, err = driverB.GetActorLocation(uid)
+		if errors.Is(err, gactor.ErrActorNotExists) {
+			return
+		}
+		if err != nil {
+			t.Fatalf("lookup actor registry after unregister: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatalf("expected local cache to be invalidated by pubsub before fallback ttl elapsed")
 }
 
 func TestRegistryNilRedisClient(t *testing.T) {
