@@ -16,7 +16,20 @@ type Actor = gactor.Actor
 type CActor = gactor.CActor
 
 // ActorBehavior
-type ActorBehavior = gactor.ActorBehavior
+type ActorBehavior interface {
+	gactor.ActorBehavior
+
+	// GetActor 获取Actor实例.
+	GetActor() Actor
+}
+
+// CActorBehavior
+type CActorBehavior interface {
+	ActorBehavior
+
+	// GetCActor 获取CActor实例.
+	GetCActor() CActor
+}
 
 // Category
 type Category = gactor.ActorCategory
