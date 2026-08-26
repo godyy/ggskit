@@ -33,6 +33,9 @@ type ModelDirty interface {
 type ActorWithModel interface {
 	ActorBehavior
 
+	// GetActor 获取Actor实例.
+	GetActor() Actor
+
 	// GetModel 获取模型实例.
 	GetModel() Model
 }
