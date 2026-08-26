@@ -31,7 +31,7 @@ type ModelDirty interface {
 
 // ActorWithModel 包含模型的Actor接口.
 type ActorWithModel interface {
-	Actor
+	ActorBehavior
 
 	// GetModel 获取模型实例.
 	GetModel() Model

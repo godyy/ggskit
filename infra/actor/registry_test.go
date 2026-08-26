@@ -478,7 +478,7 @@ func TestRegistryPubSubInvalidatesLocalCache(t *testing.T) {
 }
 
 func TestRegistryNilRedisClient(t *testing.T) {
-	driver, err := NewRegistry(nil)
+	driver, err := NewRegistry(&RegistryConfig{})
 	if err == nil || err.Error() != "redis client is nil" {
 		t.Fatalf("expected new registry nil redis error, got %v", err)
 	}
