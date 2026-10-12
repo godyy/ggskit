@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/gin-gonic/gin v1.12.0
-	github.com/godyy/gactor v0.3.1
+	github.com/godyy/gactor v0.4.0
 	github.com/godyy/gcluster v0.0.12
 	github.com/godyy/glog v0.1.2
 	github.com/godyy/grendezvous v0.1.2
@@ -16,6 +16,7 @@ require (
 	go.etcd.io/etcd/client/v3 v3.6.12
 	go.mongodb.org/mongo-driver/v2 v2.6.0
 	go.uber.org/zap v1.28.0
+	golang.org/x/sync v0.20.0
 	google.golang.org/protobuf v1.36.11
 )
 
@@ -64,7 +65,6 @@ require (
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
