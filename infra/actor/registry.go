@@ -32,10 +32,11 @@ const (
 )
 
 var (
-	ErrActorUIDRequired     = errors.New("actor uid is required")
-	ErrActorNodeIDRequired  = errors.New("node id is required")
-	ErrActorLeaseIDRequired = errors.New("lease id is required")
-	ErrActorTTLInvalid      = errors.New("ttl must be greater than or equal to 0")
+	ErrActorUIDRequired           = errors.New("actor uid is required")
+	ErrActorNodeIDRequired        = errors.New("node id is required")
+	ErrActorLeaseIDRequired       = errors.New("lease id is required")
+	ErrActorSourceLeaseIDRequired = errors.New("source lease id is required")
+	ErrActorTTLInvalid            = errors.New("ttl must be greater than or equal to 0")
 
 	registerActorScript = redis.NewScript(`
 local keyType = redis.call("TYPE", KEYS[1])["ok"]
@@ -72,6 +73,47 @@ redis.call("HSET", KEYS[1],
 )
 
 local ttl = tonumber(ARGV[3]) or 0
+if ttl > 0 then
+    redis.call("EXPIRE", KEYS[1], ttl)
+    return {0, ARGV[1], ttl}
+end
+
+redis.call("PERSIST", KEYS[1])
+return {0, ARGV[1], 0}
+`)
+
+	takeOverActorScript = redis.NewScript(`
+local keyType = redis.call("TYPE", KEYS[1])["ok"]
+if keyType == "none" then
+    return {1}
+end
+
+local currentLeaseId = ""
+if keyType == "hash" then
+    currentLeaseId = redis.call("HGET", KEYS[1], "lease_id") or ""
+elseif keyType == "string" then
+    local raw = redis.call("GET", KEYS[1])
+    if not raw then
+        return {1}
+    end
+
+    local reg = cjson.decode(raw)
+    currentLeaseId = reg["LeaseId"] or ""
+end
+
+if currentLeaseId ~= ARGV[3] then
+    return {3}
+end
+
+if keyType == "string" then
+    redis.call("DEL", KEYS[1])
+end
+redis.call("HSET", KEYS[1],
+    "node_id", ARGV[1],
+    "lease_id", ARGV[2]
+)
+
+local ttl = tonumber(ARGV[4]) or 0
 if ttl > 0 then
     redis.call("EXPIRE", KEYS[1], ttl)
     return {0, ARGV[1], ttl}
@@ -338,6 +380,66 @@ func (d *Registry) RegisterActor(params gactor.ActorRegisterParams) (gactor.Acto
 		return registerResult, gactor.ErrActorAlreadyRegistered
 	default:
 		return gactor.ActorRegisterResult{}, fmt.Errorf("unexpected register script result code %d", code)
+	}
+}
+
+// TakeOverActor 基于源租约原子接管 Actor。
+func (d *Registry) TakeOverActor(params gactor.ActorTakeOverParams) (gactor.ActorRegisterResult, error) {
+	if err := validateTakeOver(params); err != nil {
+		return gactor.ActorRegisterResult{}, err
+	}
+
+	regKey := genActorRegKey(params.UID)
+	ctx, cancel := newRegistryContext()
+	defer cancel()
+
+	result, err := takeOverActorScript.Run(ctx, d.cfg.RedisCli, []string{regKey},
+		params.NodeId,
+		params.LeaseId,
+		params.SourceLeaseId,
+		params.TTL,
+	).Result()
+	if err != nil {
+		return gactor.ActorRegisterResult{}, err
+	}
+
+	results, err := scriptResults(result)
+	if err != nil {
+		return gactor.ActorRegisterResult{}, err
+	}
+
+	code, err := resultInt64(results, 0, "take over")
+	if err != nil {
+		return gactor.ActorRegisterResult{}, err
+	}
+
+	switch code {
+	case registryScriptResultOK:
+		nodeId, err := resultString(results, 1, "take over")
+		if err != nil {
+			return gactor.ActorRegisterResult{}, err
+		}
+		ttl, err := resultInt64(results, 2, "take over")
+		if err != nil {
+			return gactor.ActorRegisterResult{}, err
+		}
+		registerResult := gactor.ActorRegisterResult{
+			NodeId:   nodeId,
+			ExpireAt: ttlToExpireAt(ttl),
+		}
+		d.publishLocationInvalidation(params.UID)
+		d.cacheLocation(params.UID, gactor.ActorLocation{
+			NodeId:   registerResult.NodeId,
+			ExpireAt: registerResult.ExpireAt,
+		})
+		return registerResult, nil
+	case registryScriptResultNotExists:
+		d.deleteCachedLocation(params.UID)
+		return gactor.ActorRegisterResult{}, gactor.ErrActorNotExists
+	case registryScriptResultLeaseMismatch:
+		return gactor.ActorRegisterResult{}, gactor.ErrLeaseMismatch
+	default:
+		return gactor.ActorRegisterResult{}, fmt.Errorf("unexpected take over script result code %d", code)
 	}
 }
 
@@ -628,6 +730,25 @@ func validateRegister(params gactor.ActorRegisterParams) error {
 	}
 	if params.TTL < 0 {
 		return pkgerrors.WithMessagef(ErrActorTTLInvalid, "register actor: invalid ttl %d", params.TTL)
+	}
+	return nil
+}
+
+func validateTakeOver(params gactor.ActorTakeOverParams) error {
+	if err := validateUID(params.UID); err != nil {
+		return pkgerrors.WithMessage(err, "take over actor")
+	}
+	if params.NodeId == "" {
+		return pkgerrors.WithMessage(ErrActorNodeIDRequired, "take over actor")
+	}
+	if params.LeaseId == "" {
+		return pkgerrors.WithMessage(ErrActorLeaseIDRequired, "take over actor")
+	}
+	if params.SourceLeaseId == "" {
+		return pkgerrors.WithMessage(ErrActorSourceLeaseIDRequired, "take over actor")
+	}
+	if params.TTL < 0 {
+		return pkgerrors.WithMessagef(ErrActorTTLInvalid, "take over actor: invalid ttl %d", params.TTL)
 	}
 	return nil
 }

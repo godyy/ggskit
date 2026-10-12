@@ -211,6 +211,94 @@ func TestRegistryLeaseMismatch(t *testing.T) {
 	}
 }
 
+func TestRegistryTakeOverActor(t *testing.T) {
+	driver := setupRegistryTestDriver(t)
+	uid := testActorUID(10030)
+
+	if _, err := driver.RegisterActor(gactor.ActorRegisterParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+		TTL:     5,
+	}); err != nil {
+		t.Fatalf("register actor: %v", err)
+	}
+
+	result, err := driver.TakeOverActor(gactor.ActorTakeOverParams{
+		UID:           uid,
+		NodeId:        "node-b",
+		LeaseId:       "lease-b",
+		SourceLeaseId: "lease-a",
+		TTL:           3,
+	})
+	if err != nil {
+		t.Fatalf("take over actor: %v", err)
+	}
+	if result.NodeId != "node-b" {
+		t.Fatalf("unexpected takeover node id: %s", result.NodeId)
+	}
+	assertRemainingTTLInRange(t, result.ExpireAt, 2, 3)
+
+	location, err := driver.GetActorLocation(uid)
+	if err != nil {
+		t.Fatalf("get actor location after takeover: %v", err)
+	}
+	if location.NodeId != "node-b" {
+		t.Fatalf("unexpected actor location after takeover: %s", location.NodeId)
+	}
+
+	if err := driver.KeepActorAlive(gactor.ActorKeepAliveParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+		TTL:     3,
+	}); !errors.Is(err, gactor.ErrLeaseMismatch) {
+		t.Fatalf("expected old lease keepalive to fail with ErrLeaseMismatch, got %v", err)
+	}
+
+	if err := driver.UnregisterActor(gactor.ActorUnregisterParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+	}); !errors.Is(err, gactor.ErrLeaseMismatch) {
+		t.Fatalf("expected old lease unregister to fail with ErrLeaseMismatch, got %v", err)
+	}
+}
+
+func TestRegistryTakeOverActorRejectsInvalidSource(t *testing.T) {
+	driver := setupRegistryTestDriver(t)
+	uid := testActorUID(100301)
+
+	if _, err := driver.RegisterActor(gactor.ActorRegisterParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+		TTL:     5,
+	}); err != nil {
+		t.Fatalf("register actor: %v", err)
+	}
+
+	if _, err := driver.TakeOverActor(gactor.ActorTakeOverParams{
+		UID:           uid,
+		NodeId:        "node-b",
+		LeaseId:       "lease-b",
+		SourceLeaseId: "lease-wrong",
+		TTL:           3,
+	}); !errors.Is(err, gactor.ErrLeaseMismatch) {
+		t.Fatalf("expected takeover with mismatched source lease to fail with ErrLeaseMismatch, got %v", err)
+	}
+
+	if _, err := driver.TakeOverActor(gactor.ActorTakeOverParams{
+		UID:           testActorUID(100302),
+		NodeId:        "node-b",
+		LeaseId:       "lease-b",
+		SourceLeaseId: "lease-a",
+		TTL:           3,
+	}); !errors.Is(err, gactor.ErrActorNotExists) {
+		t.Fatalf("expected takeover of missing actor to fail with ErrActorNotExists, got %v", err)
+	}
+}
+
 func TestRegistryUnregisterActor(t *testing.T) {
 	driver := setupRegistryTestDriver(t)
 	uid := testActorUID(10031)
@@ -543,6 +631,19 @@ func TestRegistryValidateParams(t *testing.T) {
 				return err
 			},
 			wantErr: ErrActorTTLInvalid,
+		},
+		{
+			name: "takeover empty source lease id",
+			call: func() error {
+				_, err := driver.TakeOverActor(gactor.ActorTakeOverParams{
+					UID:     testActorUID(220031),
+					NodeId:  "node-b",
+					LeaseId: "lease-b",
+					TTL:     1,
+				})
+				return err
+			},
+			wantErr: ErrActorSourceLeaseIDRequired,
 		},
 		{
 			name: "unregister zero uid",
