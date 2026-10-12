@@ -53,6 +53,26 @@ func (s *Service) Stop() error {
 	return s.core.Stop()
 }
 
+// StartMigration 开始将本节点 Actor 迁移到目标节点。
+func (s *Service) StartMigration(targetNodeID string, cb gactor.ServiceMigrationConvergedFunc) error {
+	return s.core.StartMigration(targetNodeID, cb)
+}
+
+// MigrationSnapshot 返回当前迁移进度。
+func (s *Service) MigrationSnapshot() gactor.ServiceMigrationSnapshot {
+	return s.core.MigrationSnapshot()
+}
+
+// FinishMigrationForwarding 停止迁移完成后的源端转发。
+func (s *Service) FinishMigrationForwarding() error {
+	return s.core.FinishMigrationForwarding()
+}
+
+// FinalizeMigration 回收源端已迁移 Actor。
+func (s *Service) FinalizeMigration(ctx context.Context) error {
+	return s.core.FinalizeMigration(ctx)
+}
+
 // HandlePacket 处理节点字节数据.
 func (s *Service) HandlePacket(remoteNodeId string, data []byte) error {
 	return s.core.HandlePacket(remoteNodeId, data)

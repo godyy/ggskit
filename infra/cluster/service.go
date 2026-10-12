@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
@@ -116,4 +117,17 @@ func (s *Service) Stop() {
 // Send2Node 发送字节数据 b 到 nodeId 指定的节点.
 func (s *Service) Send2Node(nodeId string, b []byte) error {
 	return s.agent.Send2Node(nodeId, b)
+}
+
+// GetNode 返回当前集群视图中的节点信息。
+func (s *Service) GetNode(nodeID string) (*Node, error) {
+	node, err := s.center.GetNode(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	result, ok := node.(*Node)
+	if !ok {
+		return nil, errors.New("cluster node type mismatch")
+	}
+	return result, nil
 }
