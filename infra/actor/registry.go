@@ -20,8 +20,11 @@ const (
 	// registryTimeout 注册表操作超时时间。
 	registryTimeout = 5 * time.Second
 
-	// registryInvalidateChannel 用于广播 Actor Location 失效事件。
-	registryInvalidateChannel = "actor_registry:invalidate"
+	// registryChangeStream 保存可回放的 Actor Location 变更事件。
+	registryChangeStream = "actor_registry:changes"
+
+	// registryStreamReadBlock 控制 Stream 空闲时的最长阻塞读取时间。
+	registryStreamReadBlock = 100 * time.Millisecond
 )
 
 const (
@@ -112,6 +115,13 @@ redis.call("HSET", KEYS[1],
     "node_id", ARGV[1],
     "lease_id", ARGV[2]
 )
+local revision = redis.call("HINCRBY", KEYS[1], "revision", 1)
+redis.call("XADD", KEYS[2], "MAXLEN", "~", ARGV[5], "*",
+    "category", ARGV[6],
+    "id", ARGV[7],
+    "revision", revision,
+    "op", "upsert"
+)
 
 local ttl = tonumber(ARGV[4]) or 0
 if ttl > 0 then
@@ -151,6 +161,16 @@ if currentNodeId ~= ARGV[1] or currentLeaseId ~= ARGV[2] then
     return {3}
 end
 
+local revision = 1
+if keyType == "hash" then
+    revision = tonumber(redis.call("HGET", KEYS[1], "revision") or "0") + 1
+end
+redis.call("XADD", KEYS[2], "MAXLEN", "~", ARGV[3], "*",
+    "category", ARGV[4],
+    "id", ARGV[5],
+    "revision", revision,
+    "op", "delete"
+)
 redis.call("DEL", KEYS[1])
 return {0}
 `)
@@ -226,12 +246,12 @@ func genActorRegKey(uid ActorUID) string {
 	return fmt.Sprintf("actor_reg:%d:%d", uid.Category, uid.ID)
 }
 
-// genActorUIDPayload 生成 ActorUID 的失效消息载荷。
+// genActorUIDPayload 生成跨 Store 复用的 ActorUID 消息载荷。
 func genActorUIDPayload(uid ActorUID) string {
 	return fmt.Sprintf("%d:%d", uid.Category, uid.ID)
 }
 
-// parseActorUIDPayload 从失效消息载荷中解析出 ActorUID。
+// parseActorUIDPayload 解析跨 Store 复用的 ActorUID 消息载荷。
 func parseActorUIDPayload(payload string) (ActorUID, error) {
 	categoryText, idText, ok := strings.Cut(payload, ":")
 	if !ok {
@@ -242,12 +262,10 @@ func parseActorUIDPayload(payload string) (ActorUID, error) {
 	if err != nil {
 		return ActorUID{}, pkgerrors.WithMessagef(err, "parse actor uid payload category: %q", payload)
 	}
-
 	id, err := strconv.ParseInt(idText, 10, 64)
 	if err != nil {
 		return ActorUID{}, pkgerrors.WithMessagef(err, "parse actor uid payload id: %q", payload)
 	}
-
 	return ActorUID{
 		Category: gactor.ActorCategory(category),
 		ID:       gactor.ActorID(id),
@@ -259,8 +277,13 @@ type RegistryConfig struct {
 	// Redis 客户端.
 	RedisCli redis.UniversalClient
 
+	// ChangeStreamMaxLen 是 Location 变更 Stream 的最大近似长度。
+	// 应覆盖本地缓存和迁移转发窗口内可能产生的位置变更量。
+	// 默认值为 100000。
+	ChangeStreamMaxLen int64
+
 	// LocalCacheMaxTTL 是本地缓存允许保留的最长时间。
-	// 即使 Redis 中没有 TTL，也只在本地短暂缓存，避免 Pub/Sub 丢消息时长期脏读。
+	// Stream 会主动失效变更位置；TTL 与迁移转发窗口共同覆盖传播延迟。
 	// 默认值为 5 秒。
 	LocalCacheMaxTTL time.Duration
 
@@ -273,6 +296,9 @@ func (c *RegistryConfig) init() error {
 	if c.RedisCli == nil {
 		return errors.New("redis client is nil")
 	}
+	if c.ChangeStreamMaxLen <= 0 {
+		c.ChangeStreamMaxLen = 100000
+	}
 	if c.LocalCacheMaxTTL <= 0 {
 		c.LocalCacheMaxTTL = 5 * time.Second
 	}
@@ -284,10 +310,12 @@ func (c *RegistryConfig) init() error {
 
 // Registry Actor 注册表.
 type Registry struct {
-	cfg      *RegistryConfig    // 配置
-	sf       singleflight.Group // 用于并发控制
-	locCache sync.Map           // 本地缓存
-	invalPS  *redis.PubSub      // 用于订阅失效事件
+	cfg        *RegistryConfig    // 配置
+	sf         singleflight.Group // 用于并发控制
+	locCache   sync.Map           // 本地缓存
+	streamCtx  context.Context    // Stream 消费生命周期。
+	stopStream context.CancelFunc // 停止 Stream 消费。
+	streamWG   sync.WaitGroup     // 等待 Stream 消费退出。
 }
 
 // registryLocationCacheEntry 表示一条本地缓存的 Actor Location。
@@ -301,9 +329,21 @@ func NewRegistry(cfg *RegistryConfig) (*Registry, error) {
 	if err := cfg.init(); err != nil {
 		return nil, err
 	}
-	reg := &Registry{cfg: cfg}
-	reg.startInvalidationSubscriber()
+	streamCtx, stopStream := context.WithCancel(context.Background())
+	reg := &Registry{
+		cfg:        cfg,
+		streamCtx:  streamCtx,
+		stopStream: stopStream,
+	}
+	reg.startChangeConsumer()
 	return reg, nil
+}
+
+// Close 停止 Registry 的后台 Stream 消费。
+func (d *Registry) Close() error {
+	d.stopStream()
+	d.streamWG.Wait()
+	return nil
 }
 
 // MakeLeaseID 生成全局唯一租约 ID.
@@ -354,7 +394,6 @@ func (d *Registry) RegisterActor(params gactor.ActorRegisterParams) (gactor.Acto
 			NodeId:   nodeId,
 			ExpireAt: ttlToExpireAt(ttl),
 		}
-		d.publishLocationInvalidation(params.UID)
 		d.cacheLocation(params.UID, gactor.ActorLocation{
 			NodeId:   registerResult.NodeId,
 			ExpireAt: registerResult.ExpireAt,
@@ -393,11 +432,14 @@ func (d *Registry) TakeOverActor(params gactor.ActorTakeOverParams) (gactor.Acto
 	ctx, cancel := newRegistryContext()
 	defer cancel()
 
-	result, err := takeOverActorScript.Run(ctx, d.cfg.RedisCli, []string{regKey},
+	result, err := takeOverActorScript.Run(ctx, d.cfg.RedisCli, []string{regKey, registryChangeStream},
 		params.NodeId,
 		params.LeaseId,
 		params.SourceLeaseId,
 		params.TTL,
+		d.cfg.ChangeStreamMaxLen,
+		params.UID.Category,
+		params.UID.ID,
 	).Result()
 	if err != nil {
 		return gactor.ActorRegisterResult{}, err
@@ -427,7 +469,6 @@ func (d *Registry) TakeOverActor(params gactor.ActorTakeOverParams) (gactor.Acto
 			NodeId:   nodeId,
 			ExpireAt: ttlToExpireAt(ttl),
 		}
-		d.publishLocationInvalidation(params.UID)
 		d.cacheLocation(params.UID, gactor.ActorLocation{
 			NodeId:   registerResult.NodeId,
 			ExpireAt: registerResult.ExpireAt,
@@ -453,9 +494,12 @@ func (d *Registry) UnregisterActor(params gactor.ActorUnregisterParams) error {
 	ctx, cancel := newRegistryContext()
 	defer cancel()
 
-	result, err := unregisterActorScript.Run(ctx, d.cfg.RedisCli, []string{regKey},
+	result, err := unregisterActorScript.Run(ctx, d.cfg.RedisCli, []string{regKey, registryChangeStream},
 		params.NodeId,
 		params.LeaseId,
+		d.cfg.ChangeStreamMaxLen,
+		params.UID.Category,
+		params.UID.ID,
 	).Result()
 	if err != nil {
 		return err
@@ -474,7 +518,6 @@ func (d *Registry) UnregisterActor(params gactor.ActorUnregisterParams) error {
 	switch code {
 	case registryScriptResultOK:
 		d.deleteCachedLocation(params.UID)
-		d.publishLocationInvalidation(params.UID)
 		return nil
 	case registryScriptResultNotExists:
 		d.deleteCachedLocation(params.UID)
@@ -608,38 +651,113 @@ func (d *Registry) getLocationFromRedis(regKey string) (gactor.ActorLocation, er
 	}
 }
 
-// startInvalidationSubscriber 启动失效事件订阅。
-// Pub/Sub 只用于加速失效，本地短 TTL 负责兜底。
-func (d *Registry) startInvalidationSubscriber() {
-	pubsub := d.cfg.RedisCli.Subscribe(context.Background(), registryInvalidateChannel)
-	if _, err := pubsub.Receive(context.Background()); err != nil {
-		_ = pubsub.Close()
-		return
-	}
-	d.invalPS = pubsub
-
+// startChangeConsumer 启动可回放的 Location 变更消费者。
+func (d *Registry) startChangeConsumer() {
+	d.streamWG.Add(1)
 	go func() {
-		ch := pubsub.Channel()
-		for msg := range ch {
-			if msg == nil || msg.Payload == "" {
-				continue
-			}
-			uid, err := parseActorUIDPayload(msg.Payload)
-			if err != nil {
-				continue
-			}
-			d.deleteCachedLocation(uid)
-		}
+		defer d.streamWG.Done()
+		d.consumeLocationChanges()
 	}()
 }
 
-// publishLocationInvalidation 广播一条 Actor Location 失效事件。
-// 该通知是最佳努力语义，失败时由本地短 TTL 兜底收敛。
-func (d *Registry) publishLocationInvalidation(uid ActorUID) {
-	ctx, cancel := newRegistryContext()
-	defer cancel()
+// consumeLocationChanges 在断线后从最后成功处理的位置回放 Stream。
+// 缓存始终可用，迁移源节点的转发窗口覆盖事件传播延迟。
+func (d *Registry) consumeLocationChanges() {
+	lastID := "$"
+	for {
+		if d.streamCtx.Err() != nil {
+			return
+		}
 
-	_ = d.cfg.RedisCli.Publish(ctx, registryInvalidateChannel, genActorUIDPayload(uid)).Err()
+		streams, err := d.cfg.RedisCli.XRead(d.streamCtx, &redis.XReadArgs{
+			Streams: []string{registryChangeStream, lastID},
+			Count:   256,
+			Block:   registryStreamReadBlock,
+		}).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			if isMissingStreamError(err) {
+				// Stream 首次创建前的缓存可能已存在；从首条事件补读，避免漏掉创建瞬间的迁移。
+				lastID = "0-0"
+			}
+			if !d.waitChangeRetry() {
+				return
+			}
+			continue
+		}
+
+		for _, stream := range streams {
+			for _, message := range stream.Messages {
+				_ = d.applyLocationChange(message)
+				lastID = message.ID
+			}
+		}
+	}
+}
+
+// isMissingStreamError 判断 Redis 是否因 Stream 尚未创建而返回错误。
+func isMissingStreamError(err error) bool {
+	return errors.Is(err, redis.Nil) || (err != nil && strings.Contains(err.Error(), "no such key"))
+}
+
+// applyLocationChange 应用一条 Location 变更。缓存只保存位置，不将 Stream 作为第二事实源。
+func (d *Registry) applyLocationChange(message redis.XMessage) error {
+	category, err := streamInt64(message.Values, "category")
+	if err != nil {
+		return err
+	}
+	id, err := streamInt64(message.Values, "id")
+	if err != nil {
+		return err
+	}
+	op, err := streamString(message.Values, "op")
+	if err != nil {
+		return err
+	}
+	uid := ActorUID{
+		Category: gactor.ActorCategory(category),
+		ID:       gactor.ActorID(id),
+	}
+	if op != "upsert" && op != "delete" {
+		return fmt.Errorf("unknown registry change operation %q", op)
+	}
+	d.deleteCachedLocation(uid)
+	return nil
+}
+
+// waitChangeRetry 等待下一次 Stream 连接尝试。
+func (d *Registry) waitChangeRetry() bool {
+	select {
+	case <-d.streamCtx.Done():
+		return false
+	case <-time.After(registryStreamReadBlock):
+		return true
+	}
+}
+
+// streamString 从 Redis Stream 字段中读取字符串。
+func streamString(values map[string]any, key string) (string, error) {
+	value, ok := values[key]
+	if !ok {
+		return "", fmt.Errorf("registry change field %q is missing", key)
+	}
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("registry change field %q has unexpected type %T", key, value)
+	}
+	return text, nil
+}
+
+// streamInt64 从 Redis Stream 字段中读取 int64。
+func streamInt64(values map[string]any, key string) (int64, error) {
+	text, err := streamString(values, key)
+	if err != nil {
+		return 0, err
+	}
+	value, err := strconv.ParseInt(text, 10, 64)
+	if err != nil {
+		return 0, pkgerrors.WithMessagef(err, "parse registry change field %q", key)
+	}
+	return value, nil
 }
 
 // getCachedLocation 尝试读取本地缓存中的 Actor Location。

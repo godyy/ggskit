@@ -29,6 +29,9 @@ func newUncheckedRegistry(tb testing.TB) *Registry {
 	if err != nil {
 		tb.Fatalf("new registry: %v", err)
 	}
+	tb.Cleanup(func() {
+		_ = driver.Close()
+	})
 	return driver
 }
 
@@ -61,6 +64,9 @@ func setupRegistryTestDriver(tb testing.TB) *Registry {
 	if err != nil {
 		tb.Fatalf("new registry: %v", err)
 	}
+	tb.Cleanup(func() {
+		_ = driver.Close()
+	})
 	return driver
 }
 
@@ -506,7 +512,7 @@ func TestRegistryConcurrentRegister(t *testing.T) {
 	}
 }
 
-func TestRegistryPubSubInvalidatesLocalCache(t *testing.T) {
+func TestRegistryStreamInvalidatesLocalCacheAfterTakeOver(t *testing.T) {
 	driverA := setupRegistryTestDriver(t)
 
 	clientB := redis.NewClient(&redis.Options{
@@ -523,6 +529,9 @@ func TestRegistryPubSubInvalidatesLocalCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new secondary registry: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = driverB.Close()
+	})
 
 	uid := testActorUID(1006)
 	if _, regErr := driverA.RegisterActor(gactor.ActorRegisterParams{
@@ -541,28 +550,103 @@ func TestRegistryPubSubInvalidatesLocalCache(t *testing.T) {
 	if actorLoc.NodeId != "node-a" {
 		t.Fatalf("unexpected actor registry node id: %s", actorLoc.NodeId)
 	}
+	if _, ok := driverB.getCachedLocation(uid); !ok {
+		t.Fatal("expected secondary registry location to be cached before takeover")
+	}
 
-	if unregisterErr := driverA.UnregisterActor(gactor.ActorUnregisterParams{
-		UID:     uid,
-		NodeId:  "node-a",
-		LeaseId: "lease-a",
-	}); unregisterErr != nil {
-		t.Fatalf("unregister actor: %v", unregisterErr)
+	if _, takeOverErr := driverA.TakeOverActor(gactor.ActorTakeOverParams{
+		UID:           uid,
+		NodeId:        "node-b",
+		LeaseId:       "lease-b",
+		SourceLeaseId: "lease-a",
+		TTL:           5,
+	}); takeOverErr != nil {
+		t.Fatalf("take over actor: %v", takeOverErr)
 	}
 
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		_, err = driverB.GetActorLocation(uid)
-		if errors.Is(err, gactor.ErrActorNotExists) {
+		if _, ok := driverB.getCachedLocation(uid); !ok {
+			location, lookupErr := driverB.GetActorLocation(uid)
+			if lookupErr != nil {
+				t.Fatalf("lookup actor registry after takeover: %v", lookupErr)
+			}
+			if location.NodeId != "node-b" {
+				t.Fatalf("unexpected node after takeover: %s", location.NodeId)
+			}
 			return
-		}
-		if err != nil {
-			t.Fatalf("lookup actor registry after unregister: %v", err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	t.Fatalf("expected local cache to be invalidated by pubsub before fallback ttl elapsed")
+	t.Fatalf("expected local cache to be invalidated by stream before fallback ttl elapsed")
+}
+
+func TestRegistryStreamOnlyRecordsLocationChanges(t *testing.T) {
+	driver := setupRegistryTestDriver(t)
+	uid := testActorUID(1007)
+
+	if _, err := driver.RegisterActor(gactor.ActorRegisterParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+		TTL:     5,
+	}); err != nil {
+		t.Fatalf("register actor: %v", err)
+	}
+	if err := driver.KeepActorAlive(gactor.ActorKeepAliveParams{
+		UID:     uid,
+		NodeId:  "node-a",
+		LeaseId: "lease-a",
+		TTL:     5,
+	}); err != nil {
+		t.Fatalf("keep actor alive: %v", err)
+	}
+
+	if length, err := driver.cfg.RedisCli.XLen(context.Background(), registryChangeStream).Result(); err != nil {
+		t.Fatalf("read change stream length: %v", err)
+	} else if length != 0 {
+		t.Fatalf("expected no stream events for register and keepalive, got %d", length)
+	}
+
+	if _, err := driver.TakeOverActor(gactor.ActorTakeOverParams{
+		UID:           uid,
+		NodeId:        "node-b",
+		LeaseId:       "lease-b",
+		SourceLeaseId: "lease-a",
+		TTL:           5,
+	}); err != nil {
+		t.Fatalf("take over actor: %v", err)
+	}
+	if err := driver.UnregisterActor(gactor.ActorUnregisterParams{
+		UID:     uid,
+		NodeId:  "node-b",
+		LeaseId: "lease-b",
+	}); err != nil {
+		t.Fatalf("unregister actor: %v", err)
+	}
+
+	if length, err := driver.cfg.RedisCli.XLen(context.Background(), registryChangeStream).Result(); err != nil {
+		t.Fatalf("read change stream length: %v", err)
+	} else if length != 2 {
+		t.Fatalf("expected takeover and unregister stream events, got %d", length)
+	}
+}
+
+func TestRegistryCloseStopsChangeConsumer(t *testing.T) {
+	driver := setupRegistryTestDriver(t)
+
+	done := make(chan struct{})
+	go func() {
+		_ = driver.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("registry close did not stop the stream consumer")
+	}
 }
 
 func TestRegistryNilRedisClient(t *testing.T) {
