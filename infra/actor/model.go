@@ -35,4 +35,7 @@ type ActorWithModel interface {
 
 	// GetModel 获取模型实例.
 	GetModel() Model
+
+	// GetDB 获取数据库名称.
+	GetDB() string
 }
