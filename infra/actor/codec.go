@@ -50,9 +50,8 @@ func (c *Codec) PutBytes(b []byte) {
 //
 //	PacketTypeRawResp, PacketTypeRawPush
 //	PacketTypeS2SRpc, PacketTypeS2SRpcResp, PacketTypeS2SCast, PacketTypeS2SForward
-func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, error) {
-	var buffer gactor.Buffer
-	switch allocator.PacketType() {
+func (c *Codec) Encode(allocator gactor.PacketBufAllocator, ph gactor.PacketHead, payload any) (*gactor.Buffer, error) {
+	switch ph.PacketType() {
 	case gactor.PacketTypeRawResp, gactor.PacketTypeRawPush, gactor.PacketTypeS2SForward:
 		p := payload.(*C2SPayload)
 		msgBytes, err := proto.Marshal(p.Msg)
@@ -60,15 +59,17 @@ func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, e
 			return nil, pkgerrors.WithMessagef(err, "marshal msg of pid %d failed", p.PID)
 		}
 		head := codecc2s.NewHead(p.Pt, p.Seq, p.PID)
-		if err := allocator.AllocBuf(&buffer, len(head)+len(msgBytes)); err != nil {
+		buf, err := allocator(ph, len(head)+len(msgBytes))
+		if err != nil {
 			return nil, pkgerrors.WithMessagef(err, "alloc buf failed")
 		}
-		if _, err := buffer.Write(head[:]); err != nil {
+		if _, err := buf.Write(head[:]); err != nil {
 			return nil, pkgerrors.WithMessage(err, "write head to buf failed")
 		}
-		if _, err := buffer.Write(msgBytes); err != nil {
+		if _, err := buf.Write(msgBytes); err != nil {
 			return nil, pkgerrors.WithMessage(err, "write msg to buf failed")
 		}
+		return buf, nil
 
 	case gactor.PacketTypeS2SRpc, gactor.PacketTypeS2SRpcResp, gactor.PacketTypeS2SCast:
 		p := payload.(*S2SPayload)
@@ -76,23 +77,21 @@ func (c *Codec) Encode(allocator gactor.PacketAllocator, payload any) ([]byte, e
 		if err != nil {
 			return nil, pkgerrors.WithMessagef(err, "marshal msg of pid %d failed", p.PID)
 		}
-		if err := allocator.AllocBuf(&buffer, 4+len(msgBytes)); err != nil {
+		buf, err := allocator(ph, 4+len(msgBytes))
+		if err != nil {
 			return nil, pkgerrors.WithMessagef(err, "alloc buf failed")
 		}
-		if err := buffer.WriteUint32(uint32(p.PID)); err != nil {
+		if err := buf.WriteUint32(uint32(p.PID)); err != nil {
 			return nil, pkgerrors.WithMessage(err, "write pid to buf failed")
 		}
-		if _, err := buffer.Write(msgBytes); err != nil {
+		if _, err := buf.Write(msgBytes); err != nil {
 			return nil, pkgerrors.WithMessage(err, "write msg to buf failed")
 		}
+		return buf, nil
 
 	default:
 		return nil, errors.New("not implemented")
 	}
-
-	defer buffer.SetBuf(nil)
-
-	return buffer.Data(), nil
 }
 
 // EncodePayload 编码负载数据.
