@@ -58,6 +58,11 @@ func (s *Service) StartMigration(targetNodeID string, cb gactor.ServiceMigration
 	return s.core.StartMigration(targetNodeID, cb)
 }
 
+// StartMigrationWithPlanner 开始将本节点 Actor 迁移到目标节点，使用指定的迁移计划器。
+func (s *Service) StartMigrationWithPlanner(planner gactor.ServiceMigrationPlanner, cb gactor.ServiceMigrationConvergedFunc) error {
+	return s.core.StartMigrationWithPlanner(planner, cb)
+}
+
 // MigrationSnapshot 返回当前迁移进度。
 func (s *Service) MigrationSnapshot() gactor.ServiceMigrationSnapshot {
 	return s.core.MigrationSnapshot()
