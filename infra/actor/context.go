@@ -186,68 +186,88 @@ func (h *ContextSugarUtil) RPCWithContext(ctx *Context, cctx context.Context, to
 // ContextRPCResp 上下文 RPC 响应.
 type ContextRPCResp struct {
 	Ctx   *Context      // 上下文.
+	CbCtx any           // 回调上下文.
 	Reply proto.Message // 回复消息.
 	Err   error         // 错误.
 }
 
-// ContextAsyncRPCCallback 上下文异步 RPC 回调.
-type ContextAsyncRPCCallback func(resp ContextRPCResp)
+// ContextAsyncRPCFunc 上下文异步 RPC 回调.
+type ContextAsyncRPCFunc func(resp ContextRPCResp)
 
-// ContextAsyncRPCCallback 上下文异步 RPC 回调.
-func (h *ContextSugarUtil) handleAsyncRPCResp(ctx *Context, resp gactor.RPCResp, callback ContextAsyncRPCCallback) {
+// cbctxContextAsyncRPC 上下文异步 RPC 回调上下文.
+func cbctxContextAsyncRPC(cb ContextAsyncRPCFunc, cbctx any) gactor.CbCtx {
+	return gactor.NewCbCtx(cbctxKeyCb, cb, cbctxKeyCbCtx, cbctx)
+}
+
+// contextAsyncRPCCallback 上下文异步 RPC 回调.
+func contextAsyncRPCCallback(ctx *Context, resp gactor.RPCResp) {
+	cbctx := resp.Ctx().(gactor.CbCtx)
+	defer cbctx.Release()
+	cb, _ := gactor.CbCtxGet[ContextAsyncRPCFunc](cbctx, cbctxKeyCb)
+	innerCbCtx, _ := gactor.CbCtxGet[any](cbctx, cbctxKeyCbCtx)
+
 	if err := resp.Err(); err != nil {
-		callback(ContextRPCResp{Ctx: ctx, Reply: nil, Err: err})
+		cb(ContextRPCResp{Ctx: ctx, CbCtx: innerCbCtx, Reply: nil, Err: err})
 		return
 	}
 
 	var replyPayload S2SPayload
 	if err := resp.DecodeReply(&replyPayload); err != nil {
-		callback(ContextRPCResp{Ctx: ctx, Reply: nil, Err: err})
+		cb(ContextRPCResp{Ctx: ctx, CbCtx: innerCbCtx, Reply: nil, Err: err})
 		return
 	}
 
-	callback(ContextRPCResp{Ctx: ctx, Reply: replyPayload.Msg, Err: nil})
+	cb(ContextRPCResp{Ctx: ctx, CbCtx: innerCbCtx, Reply: replyPayload.Msg, Err: nil})
 }
 
 // AsyncRPCWithDeadline
-func (h *ContextSugarUtil) AsyncRPCWithDeadline(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback, deadline time.Time) error {
+func (h *ContextSugarUtil) AsyncRPCWithDeadline(ctx *Context, to ActorUID, args proto.Message, cb ContextAsyncRPCFunc, cbctx any, deadline time.Time) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
 	}
 
-	return ctx.AsyncRPCWithDeadline(to, &argsPayload, func(ctx *Context, resp gactor.RPCResp) {
-		h.handleAsyncRPCResp(ctx, resp, callback)
-	}, deadline)
+	cbctx = cbctxContextAsyncRPC(cb, cbctx)
+	if err := ctx.AsyncRPCWithDeadline(to, &argsPayload, contextAsyncRPCCallback, cbctx, deadline); err != nil {
+		cbctx.(gactor.CbCtx).Release()
+		return err
+	}
+	return nil
 }
 
 // AsyncRPCWithTimeout
-func (h *ContextSugarUtil) AsyncRPCWithTimeout(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback, timeout time.Duration) error {
-	return h.AsyncRPCWithDeadline(ctx, to, args, callback, time.Now().Add(timeout))
+func (h *ContextSugarUtil) AsyncRPCWithTimeout(ctx *Context, to ActorUID, args proto.Message, cb ContextAsyncRPCFunc, cbctx any, timeout time.Duration) error {
+	return h.AsyncRPCWithDeadline(ctx, to, args, cb, cbctx, time.Now().Add(timeout))
 }
 
 // AsyncRPC
-func (h *ContextSugarUtil) AsyncRPC(ctx *Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback) error {
+func (h *ContextSugarUtil) AsyncRPC(ctx *Context, to ActorUID, args proto.Message, cb ContextAsyncRPCFunc, cbctx any) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
 	}
 
-	return ctx.AsyncRPC(to, &argsPayload, func(ctx *Context, resp gactor.RPCResp) {
-		h.handleAsyncRPCResp(ctx, resp, callback)
-	})
+	cbctx = cbctxContextAsyncRPC(cb, cbctx)
+	if err := ctx.AsyncRPC(to, &argsPayload, contextAsyncRPCCallback, cbctx); err != nil {
+		cbctx.(gactor.CbCtx).Release()
+		return err
+	}
+	return nil
 }
 
 // AsyncRPCWithContext
-func (h *ContextSugarUtil) AsyncRPCWithContext(ctx *Context, cctx context.Context, to ActorUID, args proto.Message, callback ContextAsyncRPCCallback) error {
+func (h *ContextSugarUtil) AsyncRPCWithContext(ctx *Context, cctx context.Context, to ActorUID, args proto.Message, cb ContextAsyncRPCFunc, cbctx any) error {
 	argsPayload, err := NewS2SPayload(args, h.S2S)
 	if err != nil {
 		return err
 	}
 
-	return ctx.AsyncRPCWithContext(cctx, to, &argsPayload, func(ctx *Context, resp gactor.RPCResp) {
-		h.handleAsyncRPCResp(ctx, resp, callback)
-	})
+	cbctx = cbctxContextAsyncRPC(cb, cbctx)
+	if err := ctx.AsyncRPCWithContext(cctx, to, &argsPayload, contextAsyncRPCCallback, cbctx); err != nil {
+		cbctx.(gactor.CbCtx).Release()
+		return err
+	}
+	return nil
 }
 
 // Cast

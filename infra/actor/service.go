@@ -160,70 +160,91 @@ func (s *Service) RPCWithContext(ctx context.Context, to ActorUID, args proto.Me
 
 // ServiceRPCResp Service RPC 响应.
 type ServiceRPCResp struct {
+	CbCtx any           // 回调上下文.
 	Reply proto.Message // 回复消息.
 	Err   error         // 错误.
 }
 
-// ServiceAsyncRPCCallback Service专用异步RPC回调.
-type ServiceAsyncRPCCallback func(resp ServiceRPCResp)
+// ServiceAsyncRPCFunc Service专用异步RPC回调.
+type ServiceAsyncRPCFunc func(resp ServiceRPCResp)
 
-func (s *Service) handleAsyncRPCResp(r gactor.RPCResp, callback ServiceAsyncRPCCallback) {
+// cbctxServiceAsyncRPC 为 ServiceAsyncRPCFunc 添加上下文.
+func cbctxServiceAsyncRPC(cb ServiceAsyncRPCFunc, cbctx any) gactor.CbCtx {
+	return gactor.NewCbCtx(cbctxKeyCb, cb, cbctxKeyCbCtx, cbctx)
+}
+
+// serviceAsyncRPCCallback Service 异步 RPC 回调.
+func serviceAsyncRPCCallback(r gactor.RPCResp) {
+	cbctx := r.Ctx().(gactor.CbCtx)
+	defer cbctx.Release()
+	cb, _ := gactor.CbCtxGet[ServiceAsyncRPCFunc](cbctx, cbctxKeyCb)
+	innerCbCtx, _ := gactor.CbCtxGet[any](cbctx, cbctxKeyCbCtx)
+
 	if err := r.Err(); err != nil {
-		callback(ServiceRPCResp{Reply: nil, Err: err})
+		cb(ServiceRPCResp{CbCtx: innerCbCtx, Reply: nil, Err: err})
 		return
 	}
 
 	var replyPayload S2SPayload
 	if err := r.DecodeReply(&replyPayload); err != nil {
-		callback(ServiceRPCResp{Reply: nil, Err: err})
+		cb(ServiceRPCResp{CbCtx: innerCbCtx, Reply: nil, Err: err})
 		return
 	}
 
-	callback(ServiceRPCResp{Reply: replyPayload.Msg, Err: nil})
+	cb(ServiceRPCResp{CbCtx: innerCbCtx, Reply: replyPayload.Msg, Err: nil})
 }
 
 // AsyncRPCWithDeadline 向 to 指向的 Actor 发起异步 RPC 调用.
 // deadline 指定具体超时时刻.
-func (s *Service) AsyncRPCWithDeadline(to ActorUID, args proto.Message, callback ServiceAsyncRPCCallback, deadline time.Time) error {
+func (s *Service) AsyncRPCWithDeadline(to ActorUID, args proto.Message, cb ServiceAsyncRPCFunc, cbctx any, deadline time.Time) error {
 	argsPayload, err := NewS2SPayload(args, s.S2S)
 	if err != nil {
 		return err
 	}
 
-	return s.core.AsyncRPCWithDeadline(to, &argsPayload, func(r gactor.RPCResp) {
-		s.handleAsyncRPCResp(r, callback)
-	}, deadline)
+	cbctx = cbctxServiceAsyncRPC(cb, cbctx)
+	if err := s.core.AsyncRPCWithDeadline(to, &argsPayload, serviceAsyncRPCCallback, cbctx, deadline); err != nil {
+		cbctx.(gactor.CbCtx).Release()
+		return err
+	}
+	return nil
 }
 
 // AsyncRPCWithTimeout 向 to 指向的 Actor 发起异步 RPC 调用.
 // timeout 指定超时间隔.
-func (s *Service) AsyncRPCWithTimeout(to ActorUID, args proto.Message, callback ServiceAsyncRPCCallback, timeout time.Duration) error {
-	return s.AsyncRPCWithDeadline(to, args, callback, time.Now().Add(timeout))
+func (s *Service) AsyncRPCWithTimeout(to ActorUID, args proto.Message, cb ServiceAsyncRPCFunc, cbctx any, timeout time.Duration) error {
+	return s.AsyncRPCWithDeadline(to, args, cb, cbctx, time.Now().Add(timeout))
 }
 
 // AsyncRPC 向 to 指向的 Actor 发起异步 RPC 调用.
-func (s *Service) AsyncRPC(to ActorUID, args proto.Message, callback ServiceAsyncRPCCallback) error {
+func (s *Service) AsyncRPC(to ActorUID, args proto.Message, cb ServiceAsyncRPCFunc, cbctx any) error {
 	argsPayload, err := NewS2SPayload(args, s.S2S)
 	if err != nil {
 		return err
 	}
 
-	return s.core.AsyncRPC(to, &argsPayload, func(r gactor.RPCResp) {
-		s.handleAsyncRPCResp(r, callback)
-	})
+	cbctx = cbctxServiceAsyncRPC(cb, cbctx)
+	if err := s.core.AsyncRPC(to, &argsPayload, serviceAsyncRPCCallback, cbctx); err != nil {
+		cbctx.(gactor.CbCtx).Release()
+		return err
+	}
+	return nil
 }
 
 // AsyncRPCWithContext 向 to 指向的 Actor 发起异步 RPC 调用.
 // 超时 deadline 从 ctx 获取，若未设置, 使用默认超时时间.
-func (s *Service) AsyncRPCWithContext(ctx context.Context, to ActorUID, args proto.Message, callback ServiceAsyncRPCCallback) error {
+func (s *Service) AsyncRPCWithContext(ctx context.Context, to ActorUID, args proto.Message, cb ServiceAsyncRPCFunc, cbctx any) error {
 	argsPayload, err := NewS2SPayload(args, s.S2S)
 	if err != nil {
 		return err
 	}
 
-	return s.core.AsyncRPCWithContext(ctx, to, &argsPayload, func(r gactor.RPCResp) {
-		s.handleAsyncRPCResp(r, callback)
-	})
+	cbctx = cbctxServiceAsyncRPC(cb, cbctx)
+	if err := s.core.AsyncRPCWithContext(ctx, to, &argsPayload, serviceAsyncRPCCallback, cbctx); err != nil {
+		cbctx.(gactor.CbCtx).Release()
+		return err
+	}
+	return nil
 }
 
 // Cast 发送消息到目标actor.
