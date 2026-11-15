@@ -7,6 +7,7 @@ import (
 	"github.com/godyy/gactor"
 	codecc2s "github.com/godyy/ggskit/base/codec/c2s"
 	"github.com/godyy/ggskit/base/protocol"
+	"github.com/godyy/gutils/container/kv"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -195,16 +196,16 @@ type ContextRPCResp struct {
 type ContextAsyncRPCFunc func(resp ContextRPCResp)
 
 // cbctxContextAsyncRPC 上下文异步 RPC 回调上下文.
-func cbctxContextAsyncRPC(cb ContextAsyncRPCFunc, cbctx any) gactor.CbCtx {
+func cbctxContextAsyncRPC(cb ContextAsyncRPCFunc, cbctx any) *kv.M {
 	return gactor.NewCbCtx(cbctxKeyCb, cb, cbctxKeyCbCtx, cbctx)
 }
 
 // contextAsyncRPCCallback 上下文异步 RPC 回调.
 func contextAsyncRPCCallback(ctx *Context, resp gactor.RPCResp) {
-	cbctx := resp.Ctx().(gactor.CbCtx)
-	defer cbctx.Release()
-	cb, _ := gactor.CbCtxGet[ContextAsyncRPCFunc](cbctx, cbctxKeyCb)
-	innerCbCtx, _ := gactor.CbCtxGet[any](cbctx, cbctxKeyCbCtx)
+	cbctx := resp.Ctx().(*kv.M)
+	defer gactor.CbCtxRelease(cbctx)
+	cb := kv.Must(cbctx, cbctxKeyCb).(ContextAsyncRPCFunc)
+	innerCbCtx := kv.Must(cbctx, cbctxKeyCbCtx)
 
 	if err := resp.Err(); err != nil {
 		cb(ContextRPCResp{Ctx: ctx, CbCtx: innerCbCtx, Reply: nil, Err: err})
@@ -229,7 +230,7 @@ func (h *ContextSugarUtil) AsyncRPCWithDeadline(ctx *Context, to ActorUID, args 
 
 	cbctx = cbctxContextAsyncRPC(cb, cbctx)
 	if err := ctx.AsyncRPCWithDeadline(to, &argsPayload, contextAsyncRPCCallback, cbctx, deadline); err != nil {
-		cbctx.(gactor.CbCtx).Release()
+		gactor.CbCtxRelease(cbctx.(*kv.M))
 		return err
 	}
 	return nil
@@ -249,7 +250,7 @@ func (h *ContextSugarUtil) AsyncRPC(ctx *Context, to ActorUID, args proto.Messag
 
 	cbctx = cbctxContextAsyncRPC(cb, cbctx)
 	if err := ctx.AsyncRPC(to, &argsPayload, contextAsyncRPCCallback, cbctx); err != nil {
-		cbctx.(gactor.CbCtx).Release()
+		gactor.CbCtxRelease(cbctx.(*kv.M))
 		return err
 	}
 	return nil
@@ -264,7 +265,7 @@ func (h *ContextSugarUtil) AsyncRPCWithContext(ctx *Context, cctx context.Contex
 
 	cbctx = cbctxContextAsyncRPC(cb, cbctx)
 	if err := ctx.AsyncRPCWithContext(cctx, to, &argsPayload, contextAsyncRPCCallback, cbctx); err != nil {
-		cbctx.(gactor.CbCtx).Release()
+		gactor.CbCtxRelease(cbctx.(*kv.M))
 		return err
 	}
 	return nil
