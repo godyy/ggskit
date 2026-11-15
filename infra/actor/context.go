@@ -23,33 +23,32 @@ type ContextFuncArgs = gactor.ContextFuncArgs
 // ContextFunc
 type ContextFunc = gactor.ContextFunc
 
-type ctxK struct{}
-
 // CtxK 上下文kv的key.
-type CtxK[V any] struct {
-	*ctxK
-}
+type CtxK[V any] = kv.K[V]
 
-// CtxV 上下文kv的value.
-type CtxV = any
-
-func NewCtxK[V CtxV]() CtxK[V] {
-	return CtxK[V]{ctxK: &ctxK{}}
+// NewCtxK 创建上下文kv的key.
+func NewCtxK[V any](s string) CtxK[V] {
+	return kv.NewK[V](s)
 }
 
 // CtxKSet 通过CtxK设置Value.
-func CtxKSet[V CtxV](ctx *Context, k CtxK[V], v V) {
+func CtxKSet[V any](ctx *Context, k CtxK[V], v V) {
 	ctx.Set(k, v)
 }
 
 // CtxKGet 通过CtxK获取Value.
-func CtxKGet[V CtxV](ctx *Context, k CtxK[V]) (v V, exists bool) {
+func CtxKGet[V any](ctx *Context, k CtxK[V]) (v V, exists bool) {
 	var vv any
 	vv, exists = ctx.Get(k)
 	if exists {
 		v = vv.(V)
 	}
 	return
+}
+
+// CtxKMust 通过CtxK获取Value, 若不存在则panic.
+func CtxKMust[V any](ctx *Context, k CtxK[V]) V {
+	return kv.Must(ctx, k)
 }
 
 // CtxActor 获取上下文中的 Actor, 泛型支持.
@@ -63,7 +62,7 @@ func CtxActorModule[M Module](ctx *Context, autoCreate bool) M {
 }
 
 // ctxKSeq	 用于存储请求序号的key.
-var ctxKSeq = NewCtxK[uint32]()
+var ctxKSeq = NewCtxK[uint32]("req_seq")
 
 // ContextSugarUtil 上下文语法糖工具.
 type ContextSugarUtil struct {
@@ -98,10 +97,7 @@ func (h *ContextSugarUtil) Decode(ctx *Context) (protocol.PID, proto.Message, er
 // Reply 回复.
 func (h *ContextSugarUtil) Reply(ctx *Context, reply proto.Message) error {
 	if ctx.RequestType() == gactor.RequestTypeReq {
-		seq, ok := CtxKGet(ctx, ctxKSeq)
-		if !ok {
-			panic("ctx has no seq")
-		}
+		seq := CtxKMust(ctx, ctxKSeq)
 		payload, err := NewC2SPayload(codecc2s.PtResp, seq, reply, h.C2S)
 		if err != nil {
 			return err
