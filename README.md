@@ -23,7 +23,7 @@ ggskit
 │   ├── actor        基于 gactor 的 Actor 封装
 │   ├── cluster      基于 gcluster + etcd 的集群服务
 │   ├── mongobd      MongoDB 操作后台
-│   ├── monitor      监控 (pprof / 探针)
+│   ├── monitor      监控 (pprof / 探针 / prometheus 指标暴露)
 │   └── noderouter   节点路由选择器
 └── utils/           通用工具
 ```
@@ -53,10 +53,11 @@ ggskit
   - `ContextSugarUtil` / `ActorSugarUtil`: 上下文与 Actor 的 RPC 语法糖;
   - `Model` / `Modules` / `ModuleRegistry`: 基于 BSON 的数据模型与模块化持久化;
   - `Registry` / `ServerStore`: 基于 Redis 的 Actor 位置注册表(含变更 Stream 与本地缓存)与所属服务器存储;
-  - `Router`: 结合节点分组与 rendezvous hashing 的 Actor 部署节点选择。
+  - `Router`: 结合节点分组与 rendezvous hashing 的 Actor 部署节点选择;
+  - [metrics](infra/actor/metrics): 基于 Prometheus 的 `gactor.ServiceMonitor` / `gactor.ServiceMigrationMonitor` 实现, 采集 Actor/定时器/RPC/Cast 与迁移指标。
 - **[cluster](infra/cluster)**: 基于 `gcluster` + etcd 的集群服务。`Center` 负责在 etcd 中注册自身、同步并监听节点列表变更(带租约保活与退避重试); `Node` 描述节点信息; `Service` 组合 Center 与 Agent, 提供节点收发与查询。
 - **[mongobd](infra/mongobd)**: MongoDB 异步操作后台。`BD` 按哈希键将操作符(`OpLoad`/`OpUpdate`/`OpBulk`)分发到多个 `worker` 执行, 支持并发控制、默认超时与 panic 保护。
-- **[monitor](infra/monitor)**: 监控能力。`pprof` 注册标准 pprof 路由; `probe` 提供 `/healthz` 与 `/readyz` 健康就绪探针(支持就绪检查器、门闩与缓存策略)。
+- **[monitor](infra/monitor)**: 监控能力。`pprof` 注册标准 pprof 路由; `probe` 提供 `/healthz` 与 `/readyz` 健康就绪探针(支持就绪检查器、门闩与缓存策略); [prometheus](infra/monitor/prometheus) 提供服务层指标暴露入口(注册表构建与 `/metrics` 路由注册)。
 - **[noderouter](infra/noderouter)**: 节点路由选择器 `Selector` 接口及基于 rendezvous hashing 的 `RendezvousSelector` 实现, 支持分组、全量/增量更新与多候选选取。
 
 ### utils —— 通用工具
@@ -74,6 +75,7 @@ ggskit
 - [gcluster](https://github.com/godyy/gcluster) —— 集群通信
 - [glog](https://github.com/godyy/glog) —— 日志
 - [grendezvous](https://github.com/godyy/grendezvous) —— rendezvous hashing
+- [prometheus/client_golang](https://github.com/prometheus/client_golang) —— 指标采集与暴露
 - etcd client / go-redis / mongo-driver —— 集群与存储
 - protobuf —— 协议编解码
 

@@ -43,7 +43,7 @@ ggskit
 │   ├── actor        基于 gactor 的 Actor 封装
 │   ├── cluster      基于 gcluster + etcd 的集群服务
 │   ├── mongobd      MongoDB 异步操作后台
-│   ├── monitor      监控 (pprof / 探针)
+│   ├── monitor      监控 (pprof / 探针 / prometheus 指标暴露)
 │   └── noderouter   节点路由选择器 (rendezvous hashing)
 └── utils/           通用工具 (ctxutils / httputils / ip / shutdown)
 ```
@@ -90,10 +90,11 @@ ggskit
 - **base/protocol**: 协议 `PID` 由消息全名 FNV 哈希生成; 新增协议消息需注册到注册表, 保证编解码两侧一致.
 - **base/codec**: c2s 包头含 `Pt` 表(请求/响应/推送)、`Seq` 序号、`PID`; s2s 负载为 4 字节 PID + proto 负载. 修改包头结构需同步更新 `head.go` 与相关测试.
 - **infra/actor**: 是对 `gactor` 的工程化封装, 对外提供 RPC/Cast/Forward 与协议注册、模型持久化、位置注册表、路由等. 新增能力优先在此层做语法糖封装 (参考 `ContextSugarUtil` / `ActorSugarUtil`), 不改动底层 `gactor`.
+- **infra/actor/metrics**: 基于 Prometheus 实现 `gactor.ServiceMonitor` / `gactor.ServiceMigrationMonitor`, 只负责指标采集; 指标暴露入口在 `infra/monitor/prometheus`.
 - **infra/cluster**: `Center` 负责 etcd 节点注册/监听 (租约保活 + 退避重试), 涉及网络重试逻辑需保持幂等与可观测.
 - **infra/mongobd**: `BD` 按哈希键将 `OpLoad`/`OpUpdate`/`OpBulk` 分发到多个 worker, 注意并发控制、默认超时与 panic 保护.
 - **infra/noderouter**: 基于 rendezvous hashing 的节点选择; 节点集合变更通过 `Set`(全量/增量) 与 `Update`(有序增量) 维护.
-- **infra/monitor**: `pprof` 注册标准路由; `probe` 提供 `/healthz`、`/readyz`, 新增就绪检查器遵循既有 `option` 模式.
+- **infra/monitor**: `pprof` 注册标准路由; `probe` 提供 `/healthz`、`/readyz`, 新增就绪检查器遵循既有 `option` 模式; `prometheus` 提供服务层指标暴露入口 (`NewRegistry` 构建注册表、`RegisterHandler` 注册 `/metrics`).
 
 ### 测试
 
@@ -104,7 +105,7 @@ ggskit
 
 ## 依赖约束
 
-- 核心依赖: `gactor`、`gcluster`、`glog`、`grendezvous`、etcd client、go-redis、mongo-driver、protobuf.
+- 核心依赖: `gactor`、`gcluster`、`glog`、`grendezvous`、`prometheus/client_golang`、etcd client、go-redis、mongo-driver、protobuf.
 - 变更 `go.mod` 依赖版本需谨慎, 避免引入与现有分层冲突或重复能力的库; 优先复用已有依赖.
 - 错误包装统一使用 `github.com/pkg/errors`, 不要额外引入其他错误库.
 
